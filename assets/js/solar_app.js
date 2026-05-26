@@ -228,23 +228,69 @@ function gaussianRandom(rnd) {
 // ─────────────────────────────────────────────────────────────────────────────
 function initSliders() {
   const sliders = [
-    { slider: 'fc-planta',      display: 'fc-planta-val',      suffix: '%',  multiplier: 100, decimals: 0 },
-    { slider: 'fp-potencia',    display: 'fp-potencia-val',    suffix: '',   multiplier: 1,   decimals: 2 },
-    { slider: 'eta-panel',      display: 'eta-panel-val',      suffix: '%',  multiplier: 100, decimals: 0 },
-    { slider: 'tilt-angle',     display: 'tilt-val',           suffix: '°',  multiplier: 1,   decimals: 0 },
-    { slider: 'weekend-factor', display: 'weekend-factor-val', suffix: '%',  multiplier: 100, decimals: 0 },
-    { slider: 'summer-boost',   display: 'summer-boost-val',   suffix: '',   multiplier: 1,   decimals: 2, prefix: '×' },
+    { slider: 'fc-planta',        display: 'fc-planta-val',        suffix: '%',     multiplier: 100, decimals: 0 },
+    { slider: 'fp-potencia',      display: 'fp-potencia-val',      suffix: '',      multiplier: 1,   decimals: 2 },
+    { slider: 'eta-panel',        display: 'eta-panel-val',        suffix: '%',     multiplier: 100, decimals: 0 },
+    { slider: 'tilt-angle',       display: 'tilt-val',             suffix: '°',     multiplier: 1,   decimals: 0 },
+    { slider: 'weekend-factor',   display: 'weekend-factor-val',   suffix: '%',     multiplier: 100, decimals: 0 },
+    { slider: 'summer-boost',     display: 'summer-boost-val',     suffix: '',      multiplier: 1,   decimals: 2, prefix: '×' },
+    { slider: 'noise-pct',        display: 'noise-pct-val',        suffix: '%',     multiplier: 100, decimals: 1 },
+    { slider: 'rain-loss-pct',    display: 'rain-loss-pct-val',    suffix: '%',     multiplier: 100, decimals: 0 },
+    { slider: 'rain-days',        display: 'rain-days-val',        suffix: ' días', multiplier: 1,   decimals: 0 },
+    { slider: 'soiling-loss-pct', display: 'soiling-loss-pct-val', suffix: '%',     multiplier: 100, decimals: 0 },
+    { slider: 'panel-price-usd',  display: 'panel-price-usd-val',  suffix: ' USD',  multiplier: 1,   decimals: 0, prefix: '$' },
+    { slider: 'factor-respaldo',  display: 'factor-respaldo-val',  suffix: '%',     multiplier: 100, decimals: 0 },
+    { slider: 'opex-pct',         display: 'opex-pct-val',         suffix: '%',     multiplier: 100, decimals: 1 },
+    { slider: 'degradacion-pct',  display: 'degradacion-pct-val',  suffix: '%',     multiplier: 100, decimals: 1 },
+    { slider: 'wacc',             display: 'wacc-val',             suffix: '%',     multiplier: 100, decimals: 1 },
+    { slider: 'inflacion-tarifa', display: 'inflacion-tarifa-val', suffix: '%',     multiplier: 100, decimals: 1 },
   ];
   sliders.forEach(({ slider, display, suffix, multiplier, decimals, prefix }) => {
     const el = $(slider), disp = $(display);
     if (!el || !disp) return;
     const update = () => {
       const v = parseFloat(el.value) * multiplier;
-      disp.textContent = `${prefix || ''}${v.toFixed(decimals)}${suffix}`;
+      if (slider === 'panel-price-usd') {
+        const usdRate = parseFloat($('usd-mxn')?.value ?? 17.50);
+        const mxnVal = v * usdRate;
+        disp.innerHTML = `$${v.toFixed(0)} USD <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem">≈ $${mxnVal.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} MXN</span>`;
+      } else {
+        disp.textContent = `${prefix || ''}${v.toFixed(decimals)}${suffix}`;
+      }
+      
+      // Auto-calcular CAPEX en pantalla si cambiamos precios
+      if (slider === 'panel-price-usd') {
+        if (typeof runEconomics === 'function') runEconomics();
+      }
     };
     el.addEventListener('input', update);
     update();
   });
+
+  // Escuchar también cambios en inputs de texto para el CAPEX interactivo
+  ['usd-mxn', 'input-npanels', 'bos-cost'].forEach(id => {
+    $(id)?.addEventListener('input', () => {
+      // Forzar recálculo
+      const pSlider = $('panel-price-usd');
+      if (pSlider) {
+        const v = parseFloat(pSlider.value);
+        const usdRate = parseFloat($('usd-mxn')?.value ?? 17.50);
+        const mxnVal = v * usdRate;
+        const disp = $('panel-price-usd-val');
+        if (disp) disp.innerHTML = `$${v.toFixed(0)} USD <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem">≈ $${mxnVal.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} MXN</span>`;
+      }
+      if (typeof runEconomics === 'function') runEconomics();
+    });
+  });
+
+  // Toggle verano panel
+  const toggleVerano = $('toggle-verano');
+  const summerPanel  = $('summer-tariff-panel');
+  if (toggleVerano && summerPanel) {
+    const updateToggle = () => { summerPanel.style.display = toggleVerano.checked ? '' : 'none'; };
+    toggleVerano.addEventListener('change', updateToggle);
+    updateToggle();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -261,7 +307,7 @@ function destroyChart(key) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CLIENT-SIDE: GENERACIÓN DE DEMANDA INDUSTRIAL
 // ─────────────────────────────────────────────────────────────────────────────
-function generateDemandProfile(Pmax_kW, FC_planta, FP_potencia, n_shifts, plant_type, weekend_op_factor, summer_boost) {
+function generateDemandProfile(Pmax_kW, FC_planta, FP_potencia, n_shifts, plant_type, weekend_op_factor, summer_boost, noisePct = 0.04) {
   const rnd = mulberry32(42); // Semilla reproducible
   
   if (!PLANT_PROFILES[plant_type]) plant_type = 'manufactura_ligera';
@@ -318,7 +364,7 @@ function generateDemandProfile(Pmax_kW, FC_planta, FP_potencia, n_shifts, plant_
         const base = (1 - frac) * base_profile[hour_of_day] + frac * base_profile[next_h];
 
         const p = Pmax_kW * base * FC_planta * season_factor;
-        const noise = 1.0 + gaussianRandom(rnd) * 0.04;
+        const noise = 1.0 + gaussianRandom(rnd) * noisePct;
         demand[idx] = Math.max(0.0, p * noise);
         idx++;
       }
@@ -428,13 +474,14 @@ async function runDemand() {
   const plant_type    = $('plant-type-select').value;
   const weekend_op    = parseFloat($('weekend-factor').value);
   const summer_boost  = parseFloat($('summer-boost').value);
+  const noisePct      = parseFloat($('noise-pct')?.value ?? 0.04);
 
   showLoader('⚡ Generando perfil de demanda anual (35,040 puntos)...');
   
   // Pequeño retardo de UI para que pinte el loader antes del bloqueo por CPU
   setTimeout(() => {
     try {
-      const data = generateDemandProfile(Pmax, FC, FP, n_shifts, plant_type, weekend_op, summer_boost);
+      const data = generateDemandProfile(Pmax, FC, FP, n_shifts, plant_type, weekend_op, summer_boost, noisePct);
 
       state.demandData = data;
       renderDemandCharts(data);
@@ -564,13 +611,27 @@ function renderDemandStats(stats) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CLIENT-SIDE: MOTOR SOLAR FOTOVOLTAICO (JENSEN)
 // ─────────────────────────────────────────────────────────────────────────────
-function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_nominal_w) {
+function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_nominal_w, rainDays = 0, rainLossPct = 0.40, soilingLossPct = 0.05) {
+  // Build a Set of day-of-year indices that are rainy (distributed in Jun-Sep: days 152-273)
+  const rainyDaySet = new Set();
+  if (rainDays > 0) {
+    const rainStart = 151, rainEnd = 272; // 0-indexed day range Jun 1 – Sep 30
+    const rainRange = rainEnd - rainStart + 1;
+    const step = Math.max(1, Math.floor(rainRange / rainDays));
+    for (let i = 0; i < rainDays && (rainStart + i * step) <= rainEnd; i++) {
+      rainyDaySet.add(rainStart + i * step);
+    }
+  }
   const lat_r = lat * DEG;
   const lon_r = lon * DEG;
   const tilt_r = tilt * DEG;
   const azimuth_r = azimuth * DEG;
 
   const alt_factor = Math.exp(-alt / 8500.0);
+  // Meridiano estándar de la zona horaria: redondear lon al múltiplo de 15° más cercano
+  // Esto corrige el desfase horario solar: Monterrey lon=-100.31° → zona CST (UTC-6) → lon_ref=-90°
+  const lon_ref_deg = Math.round(lon / 15.0) * 15.0;
+  const lon_ref_rad = lon_ref_deg * DEG;
 
   const N = 35040;
   const Gtot_arr = new Float64Array(N);
@@ -588,8 +649,8 @@ function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_
       for (let interval = 0; interval < 96; interval++) {
         const hour_std = interval * 0.25 + 0.125;
 
-        // Posición solar real
-        const pos = _solarPosition(lat_r, lon_r, n, hour_std);
+        // Posición solar real (usando meridiano de referencia de zona horaria para corregir hora solar)
+        const pos = _solarPosition(lat_r, lon_r, n, hour_std, lon_ref_rad);
 
         // Corrección de masa de aire por altitud
         let alpha_eff = pos.alpha;
@@ -604,7 +665,13 @@ function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_
         const Gtot = _poaIrradiance(horiz.Gb_h, horiz.Gd_h, alpha_eff, pos.azimuth, tilt_r, azimuth_r);
 
         // Generación PV [kW] considerando pérdidas del sistema de 15% (Performance Ratio = 0.85)
-        const P_kw = (eta * area_m2 * Gtot * n_panels * 0.85) / 1000.0;
+        // Calcular día del año (0-indexed) para aplicar factor de lluvia
+        let dayOfYear0 = 0;
+        for (let mm = 0; mm < month_idx; mm++) dayOfYear0 += days_in_month[mm];
+        dayOfYear0 += (day - 1);
+        const rainFactor = rainyDaySet.has(dayOfYear0) ? (1.0 - rainLossPct) : 1.0;
+        // Aplicar eficiencia del módulo, pérdidas del sistema de 15% (PR = 0.85), factor de lluvias, y pérdidas por polvo acumulado (soiling)
+        const P_kw = (eta * area_m2 * Gtot * n_panels * 0.85 * rainFactor * (1.0 - soilingLossPct)) / 1000.0;
 
         Gtot_arr[idx] = Gtot;
         Gb_h_arr[idx] = horiz.Gb_h;
@@ -737,6 +804,9 @@ async function runSolar() {
     tilt:         parseFloat($('tilt-angle').value),
     azimuth:      parseFloat($('input-azimuth').value),
     p_nominal_w:  parseFloat($('input-pnominal').value),
+    rain_days:    parseFloat($('rain-days')?.value ?? 0),
+    rain_loss:    parseFloat($('rain-loss-pct')?.value ?? 0.40),
+    soiling_loss: parseFloat($('soiling-loss-pct')?.value ?? 0.05),
   };
 
   if (isNaN(payload.lat) || isNaN(payload.lon)) {
@@ -751,7 +821,8 @@ async function runSolar() {
       const data = runSolarEngine(
         payload.lat, payload.lon, payload.alt,
         payload.eta, payload.area_m2, payload.n_panels,
-        payload.tilt, payload.azimuth, payload.p_nominal_w
+        payload.tilt, payload.azimuth, payload.p_nominal_w,
+        payload.rain_days, payload.rain_loss, payload.soiling_loss
       );
 
       // Calcular balance si hay demanda guardada
@@ -813,10 +884,13 @@ async function runSolar() {
       renderSolarCharts(data);
       renderSolarKPIs(data.stats, data.balance);
       renderSolarStats(data.stats, data.balance);
-      
+
+      // Análisis económico (CFE GDMTH + ROI/VPN/TIR + gráfica inversión)
+      if (typeof runEconomics === 'function') runEconomics();
+
       $('solar-results').classList.remove('hidden');
       $('solar-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      showAlert('solar-alert', 'success', 'Cálculo local completado. Resultados visualizados correctamente.');
+      showAlert('solar-alert', 'success', 'Cálculo completado — Motor Jensen · Análisis CFE GDMTH · ROI calculado.');
     } catch (e) {
       showAlert('solar-alert', 'error', `Error en el cálculo: ${e.message}`);
       console.error(e);

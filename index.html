@@ -59,6 +59,7 @@
   <div class="navbar-links">
     <a href="#guia">Guía de Datos</a>
     <a href="#demanda">Demanda</a>
+    <a href="#economia">Tarifas CFE</a>
     <a href="#solar">Sistema PV</a>
     <a href="#resultados">Resultados</a>
   </div>
@@ -342,6 +343,52 @@
 
       </div>
 
+      <!-- Fila 3: Pérdidas Ambientales -->
+      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;">🌧️ Pérdidas Ambientales y Ruido</h3>
+      <div class="form-grid" style="margin-bottom:1.5rem">
+
+        <div class="form-group">
+          <label class="form-label" for="noise-pct">
+            Ruido estocástico de demanda <span class="label-unit">[0 – 10 %]</span>
+          </label>
+          <input type="range" class="form-range" id="noise-pct"
+                 min="0" max="0.10" step="0.005" value="0.04" />
+          <div class="range-value" id="noise-pct-val">4%</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem">Variabilidad aleatoria gaussiana sobre la curva base de demanda</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="rain-loss-pct">
+            Pérdida PV por día lluvioso <span class="label-unit">[10 – 80 %]</span>
+          </label>
+          <input type="range" class="form-range" id="rain-loss-pct"
+                 min="0.10" max="0.80" step="0.05" value="0.40" />
+          <div class="range-value" id="rain-loss-pct-val">40%</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem">Reducción de generación PV en días con cobertura nubosa significativa</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="rain-days">
+            Días de lluvia / año <span class="label-unit">[0 – 150]</span>
+          </label>
+          <input type="range" class="form-range" id="rain-days"
+                 min="0" max="150" step="1" value="60" />
+          <div class="range-value" id="rain-days-val">60 días</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem">Distribuidos en temporada Jun–Sep (Monterrey ≈ 60 días/año)</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="soiling-loss-pct">
+            Pérdidas por polvo acumulado <span class="label-unit">[0 – 20 %]</span>
+          </label>
+          <input type="range" class="form-range" id="soiling-loss-pct"
+                 min="0" max="0.20" step="0.01" value="0.05" />
+          <div class="range-value" id="soiling-loss-pct-val">5%</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem">Pérdida por suciedad o polvo acumulado antes de limpieza periódica</div>
+        </div>
+
+      </div>
+
       <div id="demand-alert"></div>
 
       <button class="btn btn-primary btn-full" id="btn-demand" style="margin-top:1rem">
@@ -367,6 +414,151 @@
       </div>
     </div>
 
+  </div>
+</section>
+
+<div class="section-divider-line"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SECCIÓN 1.5: TARIFAS CFE Y ANÁLISIS ECONÓMICO
+════════════════════════════════════════════════════════════════════════════ -->
+<section id="economia" class="section">
+  <div class="section-inner">
+    <div class="section-header fade-in">
+      <span class="section-tag tag-green">💰 Economía</span>
+      <h2 class="section-title">Tarifas CFE GDMTH y Análisis de Inversión</h2>
+      <p class="section-desc">
+        Define los precios de la tarifa GDMTH por horario, cargos adicionales y parámetros
+        de inversión para calcular el ROI, VPN, TIR y el tiempo de recuperación.
+      </p>
+    </div>
+
+    <div class="card card-lg fade-in">
+
+      <!-- Horarios CFE GDMTH -->
+      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">⏰ Horarios y Precios CFE GDMTH (Temporada Normal)</h3>
+      <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.6">
+        <strong style="color:#fbbf24">Base</strong>: 00:00–06:00 h &nbsp;|&nbsp;
+        <strong style="color:#f97316">Intermedio</strong>: 06:00–20:00 h &nbsp;|&nbsp;
+        <strong style="color:#ef4444">Punta</strong>: 20:00–22:00 h <em>(solo lunes a viernes)</em> &nbsp;|&nbsp;
+        22:00–24:00 h → Base
+      </div>
+      <div class="form-grid" style="margin-bottom:1.5rem">
+        <div class="form-group">
+          <label class="form-label" for="precio-base">Tarifa Base <span class="label-unit">[$/kWh MXN]</span></label>
+          <input type="number" class="form-input" id="precio-base" step="0.001" value="1.034" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="precio-intermedio">Tarifa Intermedia <span class="label-unit">[$/kWh MXN]</span></label>
+          <input type="number" class="form-input" id="precio-intermedio" step="0.001" value="1.379" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="precio-punta">Tarifa Punta <span class="label-unit">[$/kWh MXN]</span></label>
+          <input type="number" class="form-input" id="precio-punta" step="0.001" value="3.166" />
+        </div>
+      </div>
+
+      <!-- Toggle Periodo Especial de Verano -->
+      <div class="toggle-wrap" style="margin-bottom:.75rem">
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-verano" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">🌞 Activar <strong>Periodo Especial de Verano</strong> (1 May – 31 Oct) con tarifas diferenciadas</span>
+      </div>
+      <div id="summer-tariff-panel" style="background:rgba(251,191,36,0.05);border:1px solid rgba(251,191,36,0.2);border-radius:10px;padding:1rem;margin-bottom:1.5rem">
+        <div style="font-size:0.75rem;color:#fbbf24;margin-bottom:.75rem">⚡ Precios de verano (CFE cobra más en May–Oct): Intermedio y Punta más altos</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="precio-base-v">Base Verano <span class="label-unit">[$/kWh MXN]</span></label>
+            <input type="number" class="form-input" id="precio-base-v" step="0.001" value="1.034" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="precio-intermedio-v">Intermedio Verano <span class="label-unit">[$/kWh MXN]</span></label>
+            <input type="number" class="form-input" id="precio-intermedio-v" step="0.001" value="1.661" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="precio-punta-v">Punta Verano <span class="label-unit">[$/kWh MXN]</span></label>
+            <input type="number" class="form-input" id="precio-punta-v" step="0.001" value="4.126" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Cargos Adicionales -->
+      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;">🧾 Cargos Fijos y por Demanda CFE</h3>
+      <div class="form-grid" style="margin-bottom:1.5rem">
+        <div class="form-group">
+          <label class="form-label" for="cargo-fijo">Cargo Fijo Mensual <span class="label-unit">[$/mes MXN]</span></label>
+          <input type="number" class="form-input" id="cargo-fijo" step="1" value="58.24" />
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Cargo por usuario CFE independiente del consumo</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cargo-demanda-punta">Cargo por Demanda Punta <span class="label-unit">[$/kW/mes MXN]</span></label>
+          <input type="number" class="form-input" id="cargo-demanda-punta" step="0.01" value="105.48" />
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Se cobra sobre la demanda máxima registrada en horario punta</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cargo-respaldo">Cargo por Demanda de Respaldo <span class="label-unit">[$/kW/mes MXN]</span></label>
+          <input type="number" class="form-input" id="cargo-respaldo" step="0.01" value="67.23" />
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Aplica sobre la capacidad PV instalada como cargo de respaldo de red</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="factor-respaldo">Factor de Demanda Respaldo <span class="label-unit">[0 – 100 %]</span></label>
+          <input type="range" class="form-range" id="factor-respaldo" min="0" max="1" step="0.05" value="0.50" />
+          <div class="range-value" id="factor-respaldo-val">50%</div>
+        </div>
+      </div>
+
+      <!-- Análisis de Inversión -->
+      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;">📈 Parámetros de Inversión y Precios</h3>
+      <div class="form-grid" style="margin-bottom:1.5rem">
+        <div class="form-group">
+          <label class="form-label" for="panel-price-usd">Precio unitario del panel <span class="label-unit">[USD]</span></label>
+          <input type="range" class="form-range" id="panel-price-usd" min="80" max="400" step="5" value="180" />
+          <div class="range-value" id="panel-price-usd-val">$180 USD</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Costo FOB del módulo Tier 1 de 400W en el mercado</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bos-cost">Otros Costos e Instalación <span class="label-unit">[MXN]</span></label>
+          <input type="number" class="form-input" id="bos-cost" step="5000" value="240000" />
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Inversor, estructuras, cableado, ingeniería y mano de obra</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="capex-total">CAPEX Total del Sistema <span class="label-unit">[Calculado, MXN]</span></label>
+          <input type="number" class="form-input" id="capex-total" readonly style="background:rgba(16,185,129,0.06);color:#10b981;font-weight:700;border:1px solid rgba(16,185,129,0.3)" value="397500" />
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Fórmula: (Precio Panel * Tipo de Cambio * N° Paneles) + Otros Costos</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="opex-pct">OPEX Anual <span class="label-unit">[% del CAPEX]</span></label>
+          <input type="range" class="form-range" id="opex-pct" min="0.005" max="0.05" step="0.005" value="0.015" />
+          <div class="range-value" id="opex-pct-val">1.5%</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="vida-util">Vida Útil del Sistema <span class="label-unit">[años]</span></label>
+          <input type="number" class="form-input" id="vida-util" step="1" min="5" max="40" value="25" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="degradacion-pct">Degradación Anual Paneles <span class="label-unit">[%/año]</span></label>
+          <input type="range" class="form-range" id="degradacion-pct" min="0.002" max="0.01" step="0.001" value="0.005" />
+          <div class="range-value" id="degradacion-pct-val">0.5%</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wacc">WACC / Tasa de Descuento <span class="label-unit">[%]</span></label>
+          <input type="range" class="form-range" id="wacc" min="0.05" max="0.25" step="0.005" value="0.10" />
+          <div class="range-value" id="wacc-val">10.0%</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inflacion-tarifa">Inflación Tarifaria CFE <span class="label-unit">[%/año]</span></label>
+          <input type="range" class="form-range" id="inflacion-tarifa" min="0.00" max="0.15" step="0.005" value="0.05" />
+          <div class="range-value" id="inflacion-tarifa-val">5.0%</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="usd-mxn">Tipo de Cambio USD/MXN <span class="label-unit">[pesos por dólar]</span></label>
+          <input type="number" class="form-input" id="usd-mxn" step="0.1" value="17.50" />
+        </div>
+      </div>
+
+    </div>
   </div>
 </section>
 
@@ -504,6 +696,12 @@
       <!-- KPI Cards -->
       <div id="kpi-container" class="kpi-grid fade-in"></div>
 
+      <!-- Economic KPIs -->
+      <div id="economic-kpis-box" class="kpi-grid fade-in" style="margin-top:1rem"></div>
+
+      <!-- CFE breakdown table -->
+      <div id="cfe-breakdown-box" class="stats-summary fade-in" style="margin-bottom:2rem"></div>
+
       <!-- Estadísticas clave -->
       <div id="solar-stats-box" class="stats-summary fade-in" style="margin-bottom:2rem"></div>
 
@@ -522,6 +720,21 @@
       <div class="chart-container fade-in">
         <div class="chart-title">Perfil Diario — Generación PV vs. Demanda (Promedio Verano)</div>
         <canvas id="chart-daily-comp" height="140"></canvas>
+      </div>
+
+      <!-- Investment Recovery Chart -->
+      <div class="chart-container fade-in" id="investment-chart-wrap">
+        <div class="chart-title">Recuperación de Inversión — Flujo de Caja Acumulado vs. CAPEX</div>
+        <canvas id="chart-investment" height="200"></canvas>
+        <!-- Year Slider -->
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:1rem 1.5rem;margin-top:1rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+            <span style="font-size:.85rem;color:var(--text-muted)">📅 Año de análisis — arrastra para ver el estado en cada año</span>
+            <span id="year-slider-badge" style="background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.3);color:#f97316;padding:.25rem .75rem;border-radius:20px;font-size:.8rem;font-weight:700">Año 1</span>
+          </div>
+          <input type="range" class="form-range" id="year-slider" min="1" max="25" step="1" value="1" style="width:100%" />
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-top:1rem" id="year-cards"></div>
+        </div>
       </div>
 
       <div class="chart-container fade-in">
@@ -561,6 +774,7 @@
 
 <!-- Scripts -->
 <script src="assets/js/solar_app.js"></script>
+<script src="assets/js/solar_economics.js"></script>
 
 </body>
 </html>
