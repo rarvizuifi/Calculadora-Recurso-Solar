@@ -7,10 +7,10 @@
 <html lang="es">
 
 <head>
-  <title>Motor Solar FV — Jensen Engine</title>
+  <title>Motor Solar FV v2.1 — Jensen Engine</title>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <meta name="description" content="Motor solar fotovoltaico basado en el modelo de Jensen. Calcula irradiancia POA, generación eléctrica y balance de demanda industrial con resolución quinceminutal anual." />
+  <meta name="description" content="Motor solar fotovoltaico v2.1 basado en el modelo de Jensen. Calcula irradiancia POA, ángulos óptimos de instalación, generación eléctrica y balance de demanda industrial." />
 
   <!-- Estilos base del template -->
   <link rel="stylesheet" href="assets/css/main.css" />
@@ -31,6 +31,220 @@
       height: 1px;
       background: linear-gradient(90deg, transparent, rgba(249,115,22,0.4), transparent);
       margin: 0;
+    }
+
+    /* ── Ángulos Óptimos ───────────────────────────────────────────────────── */
+    .optimal-angles-panel {
+      background: linear-gradient(135deg, rgba(16,185,129,0.07) 0%, rgba(5,150,105,0.03) 100%);
+      border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .optimal-angles-panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #10b981, transparent);
+    }
+    .optimal-angles-title {
+      font-size: 0.85rem;
+      color: #10b981;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .angles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .angle-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(16,185,129,0.18);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      text-align: center;
+      position: relative;
+    }
+    .angle-card-label {
+      font-size: 0.7rem;
+      color: var(--text-muted, #94a3b8);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 0.35rem;
+    }
+    .angle-card-value {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #10b981;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .angle-card-unit {
+      font-size: 0.75rem;
+      color: #6ee7b7;
+      margin-top: 0.2rem;
+    }
+    .angle-card-badge {
+      display: inline-block;
+      background: rgba(16,185,129,0.15);
+      border: 1px solid rgba(16,185,129,0.3);
+      color: #6ee7b7;
+      font-size: 0.65rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 20px;
+      margin-top: 0.4rem;
+      font-weight: 600;
+    }
+    .angle-card.highlight {
+      border-color: rgba(249,115,22,0.4);
+      background: rgba(249,115,22,0.05);
+    }
+    .angle-card.highlight .angle-card-value { color: #f97316; }
+    .angle-card.highlight .angle-card-badge {
+      background: rgba(249,115,22,0.15);
+      border-color: rgba(249,115,22,0.3);
+      color: #fbbf24;
+    }
+    .angles-compass {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      padding: 1rem;
+      background: rgba(0,0,0,0.2);
+      border-radius: 12px;
+      margin-top: 0.75rem;
+    }
+    .compass-wrap {
+      flex-shrink: 0;
+      position: relative;
+      width: 80px;
+      height: 80px;
+    }
+    .compass-svg { width: 80px; height: 80px; }
+    .angles-explanation {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      line-height: 1.65;
+      flex: 1;
+    }
+    .angles-explanation strong { color: #e2e8f0; }
+    .angles-explanation .highlight-val {
+      color: #10b981;
+      font-weight: 700;
+    }
+    .apply-angles-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.1));
+      border: 1px solid rgba(16,185,129,0.4);
+      color: #10b981;
+      padding: 0.55rem 1.25rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      transition: all .2s;
+      margin-top: 1rem;
+    }
+    .apply-angles-btn:hover {
+      background: rgba(16,185,129,0.22);
+      border-color: rgba(16,185,129,0.7);
+      color: #6ee7b7;
+      box-shadow: 0 0 12px rgba(16,185,129,.2);
+    }
+    .monthly-irrad-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .monthly-irrad-table th {
+      background: rgba(16,185,129,0.1);
+      color: #10b981;
+      padding: 0.4rem 0.6rem;
+      text-align: center;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(16,185,129,0.2);
+    }
+    .monthly-irrad-table td {
+      padding: 0.35rem 0.6rem;
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: #cbd5e1;
+    }
+    .monthly-irrad-table tr:hover td { background: rgba(255,255,255,0.03); }
+    .monthly-irrad-table .best-month td { color: #fbbf24; font-weight: 700; }
+    .geo-btn-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .geo-locate-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.35);
+      color: #a5b4fc;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+    .geo-locate-btn:hover {
+      background: rgba(99,102,241,0.22);
+      border-color: rgba(99,102,241,0.6);
+      color: #c7d2fe;
+    }
+    .geo-locate-btn.loading {
+      opacity: 0.7;
+      cursor: wait;
+    }
+    .geo-status {
+      font-size: 0.72rem;
+      margin-top: 0.3rem;
+      min-height: 1rem;
+    }
+    .geo-status.ok  { color: #10b981; }
+    .geo-status.err { color: #f87171; }
+    .solar-zenith-bar {
+      margin-top: 1rem;
+    }
+    .zenith-label {
+      font-size: 0.73rem;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.3rem;
+    }
+    .zenith-track {
+      background: rgba(255,255,255,0.06);
+      border-radius: 100px;
+      height: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    .zenith-fill {
+      height: 100%;
+      border-radius: 100px;
+      background: linear-gradient(90deg, #10b981, #f97316);
+      transition: width .6s cubic-bezier(.4,0,.2,1);
     }
   </style>
 </head>
@@ -74,7 +288,7 @@
   <div class="hero-content fade-in">
     <div class="hero-badge">
       <span>⚡</span>
-      Motor de Jensen · Irradiancia POA · 35,040 Puntos/Año
+      Motor de Jensen v2.1 · Ángulos Óptimos · Irradiancia POA · 35,040 Pts/Año
     </div>
     <h1 class="hero-title">
       Motor Solar<br>
@@ -82,8 +296,8 @@
     </h1>
     <p class="hero-subtitle">
       Calcula la generación eléctrica anual de tu planta industrial con
-      resolución quinceminutal usando el modelo simplificado de Jensen.
-      Backend Python — Frontend interactivo.
+      resolución quinceminutal. Geolocalización automática, ángulos óptimos de
+      instalación calculados en tiempo real, y exportación completa a Excel.
     </p>
   </div>
 </section>
@@ -584,20 +798,31 @@
       <h3 style="font-size:0.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;">
         📍 Geolocalización del Sitio
       </h3>
+
+      <!-- Fila de botón GPS + status -->
+      <div class="geo-btn-row">
+        <button class="geo-locate-btn" id="btn-geolocate" type="button">
+          <span>📡</span> Usar mi ubicación actual (GPS)
+        </button>
+        <div>
+          <div class="geo-status" id="geo-status"></div>
+        </div>
+      </div>
+
       <div class="form-grid" style="margin-bottom:1.75rem">
         <div class="form-group">
           <label class="form-label" for="input-lat">
             Latitud <span class="label-unit">[° N positivo]</span>
           </label>
           <input type="number" class="form-input" id="input-lat"
-                 step="0.001" value="25.670" placeholder="Ej: 25.670" />
+                 step="0.0001" value="25.6700" placeholder="Ej: 25.6700" />
         </div>
         <div class="form-group">
           <label class="form-label" for="input-lon">
             Longitud <span class="label-unit">[° E positivo / O negativo]</span>
           </label>
           <input type="number" class="form-input" id="input-lon"
-                 step="0.001" value="-100.310" placeholder="Ej: -100.310" />
+                 step="0.0001" value="-100.3100" placeholder="Ej: -100.3100" />
         </div>
         <div class="form-group">
           <label class="form-label" for="input-alt">
@@ -606,6 +831,122 @@
           <input type="number" class="form-input" id="input-alt"
                  step="1" value="538" placeholder="Ej: 538" />
         </div>
+      </div>
+
+      <!-- ── PANEL DE ÁNGULOS ÓPTIMOS ──────────────────────────────────────── -->
+      <div class="optimal-angles-panel" id="optimal-angles-panel">
+        <div class="optimal-angles-title">
+          <span>🎯</span> Ángulos Óptimos de Instalación — Calculados para tu Latitud
+        </div>
+
+        <div class="angles-grid" id="angles-grid">
+          <!-- Se rellena por JS -->
+          <div class="angle-card highlight">
+            <div class="angle-card-label">Tilt Óptimo Anual</div>
+            <div class="angle-card-value" id="val-tilt-opt">—</div>
+            <div class="angle-card-unit">grados sobre la horizontal</div>
+            <div class="angle-card-badge" id="badge-tilt-opt">calculando…</div>
+          </div>
+          <div class="angle-card">
+            <div class="angle-card-label">Azimut Óptimo</div>
+            <div class="angle-card-value" id="val-az-opt">—</div>
+            <div class="angle-card-unit">grados desde el Norte</div>
+            <div class="angle-card-badge" id="badge-az-opt">—</div>
+          </div>
+          <div class="angle-card">
+            <div class="angle-card-label">Ángulo Solar Cenit (21 Jun)</div>
+            <div class="angle-card-value" id="val-zenith-solsticio">—</div>
+            <div class="angle-card-unit">ángulo cenital solar al mediodía</div>
+            <div class="angle-card-badge" id="badge-zenith">hemisferio</div>
+          </div>
+          <div class="angle-card">
+            <div class="angle-card-label">Elevación Solar Máx.</div>
+            <div class="angle-card-value" id="val-elev-max">—</div>
+            <div class="angle-card-unit">grados sobre el horizonte</div>
+            <div class="angle-card-badge" id="badge-elev">al mediodía solar</div>
+          </div>
+          <div class="angle-card">
+            <div class="angle-card-label">Declinación Solar Media</div>
+            <div class="angle-card-value" id="val-declinacion">—</div>
+            <div class="angle-card-unit">eje de la Tierra respecto al Sol</div>
+            <div class="angle-card-badge">±23.45° máx.</div>
+          </div>
+          <div class="angle-card">
+            <div class="angle-card-label">Irrad. Anual Estimada</div>
+            <div class="angle-card-value" id="val-irrad-est">—</div>
+            <div class="angle-card-unit">kWh/m² · año (POA óptimo)</div>
+            <div class="angle-card-badge" id="badge-irrad">referencia Jensen</div>
+          </div>
+        </div>
+
+        <!-- Brújula + explicación -->
+        <div class="angles-compass">
+          <div class="compass-wrap">
+            <svg class="compass-svg" viewBox="0 0 80 80" id="compass-svg">
+              <!-- Círculo exterior -->
+              <circle cx="40" cy="40" r="37" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+              <circle cx="40" cy="40" r="29" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+              <!-- Puntos cardinales -->
+              <text x="40" y="8"  text-anchor="middle" fill="#94a3b8" font-size="7" font-weight="700">N</text>
+              <text x="40" y="77" text-anchor="middle" fill="#94a3b8" font-size="7" font-weight="700">S</text>
+              <text x="74" y="43" text-anchor="middle" fill="#94a3b8" font-size="7" font-weight="700">E</text>
+              <text x="6"  y="43" text-anchor="middle" fill="#94a3b8" font-size="7" font-weight="700">O</text>
+              <!-- Líneas de cuadrante -->
+              <line x1="40" y1="12" x2="40" y2="68" stroke="rgba(255,255,255,0.06)" stroke-width="0.8"/>
+              <line x1="12" y1="40" x2="68" y2="40" stroke="rgba(255,255,255,0.06)" stroke-width="0.8"/>
+              <!-- Flecha del panel (rota por JS) -->
+              <g id="compass-arrow" transform="rotate(180,40,40)">
+                <line x1="40" y1="40" x2="40" y2="14" stroke="#10b981" stroke-width="2.5" stroke-linecap="round"/>
+                <polygon points="40,10 37,18 43,18" fill="#10b981"/>
+              </g>
+              <!-- Punto central -->
+              <circle cx="40" cy="40" r="3" fill="#f97316"/>
+            </svg>
+          </div>
+          <div class="angles-explanation" id="angles-explanation">
+            Ingresa tu latitud y longitud para calcular los ángulos óptimos de instalación en tiempo real.
+          </div>
+        </div>
+
+        <!-- Tabla de irradiancia mensual estimada -->
+        <div style="margin-top:1.25rem">
+          <div style="font-size:0.73rem;color:#10b981;font-weight:600;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:.05em;">
+            📅 Perfil de Elevación Solar Media Mensual al Mediodía
+          </div>
+          <table class="monthly-irrad-table" id="monthly-solar-table">
+            <thead>
+              <tr>
+                <th>Mes</th><th>Declinación δ</th><th>Elevación Solar α</th>
+                <th>Ángulo Incidencia θ</th><th>Factor cos(θ)</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-solar-tbody">
+              <tr><td colspan="5" style="color:#64748b;padding:1rem">Ingresa tu latitud para ver el análisis mensual…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Barras de ángulos visuales -->
+        <div style="margin-top:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem" id="angle-bars">
+          <div class="solar-zenith-bar">
+            <div class="zenith-label">
+              <span>Tilt actual del formulario</span>
+              <span id="bar-tilt-lbl">—°</span>
+            </div>
+            <div class="zenith-track"><div class="zenith-fill" id="bar-tilt-fill" style="width:0%"></div></div>
+          </div>
+          <div class="solar-zenith-bar">
+            <div class="zenith-label">
+              <span>Diferencia vs. óptimo</span>
+              <span id="bar-diff-lbl">—°</span>
+            </div>
+            <div class="zenith-track"><div class="zenith-fill" id="bar-diff-fill" style="width:0%;background:linear-gradient(90deg,#10b981,#ef4444)"></div></div>
+          </div>
+        </div>
+
+        <button class="apply-angles-btn" id="btn-apply-angles" type="button">
+          ✅ Aplicar ángulos óptimos al formulario
+        </button>
       </div>
 
       <!-- Especificaciones del panel -->
@@ -749,7 +1090,7 @@
           <span>📊</span> Descargar Excel — Reporte Completo (.xlsx)
         </button>
         <p style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted)">
-          5 hojas: Parámetros · KPIs · Resumen Mensual · Datos Anuales (35,040 filas) · Perfil Diario
+          6 hojas: Parámetros · KPIs · Ángulos Óptimos · Resumen Mensual · Datos Anuales (35,040 filas) · Perfil Diario
         </p>
       </div>
 
@@ -776,5 +1117,362 @@
 <script src="assets/js/solar_app.js"></script>
 <script src="assets/js/solar_economics.js"></script>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ÁNGULOS ÓPTIMOS — Motor de cálculo en tiempo real
+     Toda la física se realiza en el cliente; no requiere llamada al servidor.
+════════════════════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ─── Constantes físicas ────────────────────────────────────────────────────
+  const DEG = Math.PI / 180;
+  const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  // Día representativo de cada mes (ASHRAE / Spencer)
+  const MONTH_DAYS = [17,47,75,105,135,162,198,228,258,288,318,344];
+
+  // ─── Declinación solar (ecuación de Spencer) ───────────────────────────────
+  function declination(n) {
+    // δ [rad] = 23.45° * sin(360/365 * (n - 81))
+    return 23.45 * DEG * Math.sin(2 * Math.PI * (n - 81) / 365);
+  }
+
+  // ─── Elevación solar al mediodía solar (ω = 0) ────────────────────────────
+  // sin(α) = sin(φ)*sin(δ) + cos(φ)*cos(δ)   (ω=0 → cos(ω)=1)
+  function solarNoonElevation(lat_deg, delta_rad) {
+    const phi = lat_deg * DEG;
+    const sin_alpha = Math.sin(phi) * Math.sin(delta_rad) +
+                      Math.cos(phi) * Math.cos(delta_rad);
+    return Math.asin(Math.max(-1, Math.min(1, sin_alpha)));
+  }
+
+  // ─── Ángulo de incidencia (plano inclinado, mediodía solar, hemisferio N) ──
+  // θ = |φ - δ - β|  (orientación Sur óptima en hem. Norte)
+  // Forma general: cos θ = sin δ sin(φ-β) + cos δ cos(φ-β)
+  function incidenceAngle(lat_deg, delta_rad, tilt_deg) {
+    const phi   = lat_deg * DEG;
+    const beta  = tilt_deg * DEG;
+    // Para hemisferio Norte orientación Sur (γ=0 respecto al Sur):
+    // cos θ = sin φ sin δ cos β − cos φ sin δ sin β + cos φ cos δ cos β + sin φ cos δ sin β
+    // = sin δ (sin φ cos β − cos φ sin β) + cos δ (cos φ cos β + sin φ sin β)
+    // = sin δ sin(φ − β) + cos δ cos(φ − β)
+    const cos_theta = Math.sin(delta_rad) * Math.sin(phi - beta) +
+                      Math.cos(delta_rad) * Math.cos(phi - beta);
+    return Math.acos(Math.max(-1, Math.min(1, cos_theta)));
+  }
+
+  // ─── Tilt óptimo anual por maximización de ∑cos(θ) ────────────────────────
+  function computeOptimalTilt(lat_deg) {
+    // Barrido fino de tilt de 0° a 90°
+    let best_tilt = 0, best_sum = -Infinity;
+    for (let t = 0; t <= 90; t += 0.5) {
+      let sum = 0;
+      for (const n of MONTH_DAYS) {
+        const delta = declination(n);
+        const alpha = solarNoonElevation(lat_deg, delta);
+        if (alpha <= 0) continue;  // sol bajo el horizonte
+        const theta = incidenceAngle(lat_deg, delta, t);
+        const cos_t = Math.cos(theta);
+        if (cos_t > 0) sum += cos_t;
+      }
+      if (sum > best_sum) { best_sum = sum; best_tilt = t; }
+    }
+    return Math.round(best_tilt * 2) / 2;  // redondeo a 0.5°
+  }
+
+  // ─── Irradiación anual estimada simple (Jensen τ_b = 0.7^AM^0.678) ─────────
+  function estimateAnnualIrrad(lat_deg, tilt_opt) {
+    // Integración diaria muy simplificada para estimación de referencia
+    let total_kwh = 0;
+    const GSC = 1367;
+    const days = [31,28,31,30,31,30,31,31,30,31,30,31];
+    let day_cumul = 0;
+    for (let m = 0; m < 12; m++) {
+      const n = MONTH_DAYS[m];
+      const delta = declination(n);
+      const phi   = lat_deg * DEG;
+      const Eo    = 1.0 + 0.033 * Math.cos(2 * Math.PI * n / 365);
+      // Hora solar de salida: cos(omega_s) = -tan(phi)*tan(delta)
+      const cos_ws = -Math.tan(phi) * Math.tan(delta);
+      if (cos_ws >= 1) { day_cumul += days[m]; continue; }
+      const omega_s = Math.acos(Math.max(-1, Math.min(1, cos_ws)));
+      // Integración horaria (1h step)
+      const beta = tilt_opt * DEG;
+      let daily = 0;
+      const N_steps = 48; // medio-hora
+      for (let i = 0; i <= N_steps; i++) {
+        const omega  = -omega_s + (i / N_steps) * 2 * omega_s;
+        const sin_a  = Math.sin(phi)*Math.sin(delta) +
+                       Math.cos(phi)*Math.cos(delta)*Math.cos(omega);
+        if (sin_a <= 0) continue;
+        const alpha  = Math.asin(Math.max(-1, Math.min(1, sin_a)));
+        const AM     = 1 / Math.sin(alpha);
+        const tau_b  = Math.pow(0.7, Math.pow(AM, 0.678));
+        const G0     = GSC * Eo * Math.sin(alpha);
+        const Gb_h   = G0 * tau_b;
+        const Gd_h   = G0 * (1 - tau_b) * 0.5;
+        // POA (isótropo): componente directa
+        const cos_t  = Math.sin(delta)*Math.sin(phi-beta) +
+                       Math.cos(delta)*Math.cos(phi-beta)*Math.cos(omega);
+        const Rb     = (cos_t > 0 && Math.sin(alpha) > 0.01) ?
+                        cos_t / Math.sin(alpha) : 0;
+        const Gb_poa = Math.max(0, Gb_h * Rb);
+        const Gd_poa = Gd_h * (1 + Math.cos(beta)) / 2;
+        const Gr_poa = (Gb_h + Gd_h) * 0.20 * (1 - Math.cos(beta)) / 2;
+        daily += Math.max(0, Gb_poa + Gd_poa + Gr_poa);
+      }
+      // Factor de paso: omega_s en rad → horas = omega_s/PI*12
+      const daylight_h = omega_s / Math.PI * 24;
+      daily = daily / (N_steps + 1) * daylight_h;  // W/m² → Wh/m²/día
+      total_kwh += daily * days[m] / 1000;
+      day_cumul  += days[m];
+    }
+    return Math.round(total_kwh);
+  }
+
+  // ─── Función principal: calcular y renderizar ────────────────────────────
+  function computeAndRender() {
+    const lat = parseFloat(document.getElementById('input-lat').value);
+    const lon = parseFloat(document.getElementById('input-lon').value);
+
+    if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90) return;
+
+    // Ángulos óptimos
+    const tilt_opt = computeOptimalTilt(lat);
+    const azimuth_opt = lat >= 0 ? 180 : 0;  // Sur en hem. Norte, Norte en hem. Sur
+    const azimuth_lbl = lat >= 0 ? '180° — Sur' : '0° — Norte';
+    const hemisferio  = lat >= 0 ? 'Hemisferio Norte' : 'Hemisferio Sur';
+
+    // Ángulos solares medios
+    // Solsticio de verano (jun 21 ≈ n=172) y equinoccio (mar 21 ≈ n=80)
+    const delta_solsticio = declination(172);
+    const delta_equinoccio= declination(80);
+    const elev_solsticio  = solarNoonElevation(lat, delta_solsticio) / DEG;
+    const elev_equinoccio = solarNoonElevation(lat, delta_equinoccio) / DEG;
+    const zenith_solsticio= 90 - elev_solsticio;
+    const declinacion_med = 0; // equinoccio
+    const irrad_est = estimateAnnualIrrad(lat, tilt_opt);
+
+    // ── Tarjetas numéricas ──────────────────────────────────────────────────
+    const setVal = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+
+    setVal('val-tilt-opt',         tilt_opt.toFixed(1) + '°');
+    setVal('val-az-opt',           azimuth_opt.toFixed(0) + '°');
+    setVal('val-zenith-solsticio', zenith_solsticio.toFixed(1) + '°');
+    setVal('val-elev-max',         elev_solsticio.toFixed(1) + '°');
+    setVal('val-declinacion',      (lat >= 0 ? '+' : '') + lat.toFixed(2) + '°');
+    setVal('val-irrad-est',        irrad_est.toLocaleString('es-MX'));
+
+    setVal('badge-tilt-opt',   `≈ ${Math.abs(lat).toFixed(1)}° lat · ajustado`);
+    setVal('badge-az-opt',     azimuth_lbl);
+    setVal('badge-zenith',     hemisferio);
+    setVal('badge-elev',       `Equinoccio: ${elev_equinoccio.toFixed(1)}°`);
+    setVal('badge-irrad',      `Tilt ${tilt_opt.toFixed(1)}° · Jensen`);
+
+    // ── Brújula ─────────────────────────────────────────────────────────────
+    const arrow = document.getElementById('compass-arrow');
+    if (arrow) arrow.setAttribute('transform', `rotate(${azimuth_opt},40,40)`);
+
+    // ── Explicación textual ─────────────────────────────────────────────────
+    const expEl = document.getElementById('angles-explanation');
+    if (expEl) {
+      expEl.innerHTML = `
+        <strong>Ubicación:</strong> ${lat >= 0 ? 'N' : 'S'} ${Math.abs(lat).toFixed(4)}°,
+        ${lon >= 0 ? 'E' : 'O'} ${Math.abs(lon).toFixed(4)}° · <em>${hemisferio}</em><br><br>
+        <strong>Tilt óptimo anual:</strong> <span class="highlight-val">${tilt_opt.toFixed(1)}°</span> — maximiza
+        la irradiancia directa integrada a lo largo del año completo.<br><br>
+        <strong>Azimut óptimo:</strong> <span class="highlight-val">${azimuth_opt}° (${lat >= 0 ? 'Sur' : 'Norte'})</span> —
+        orientar el panel hacia el ecuador geográfico garantiza la máxima exposición solar neta.<br><br>
+        <strong>Elevación solar máxima (21 Jun):</strong> <span class="highlight-val">${elev_solsticio.toFixed(1)}°</span>
+        sobre el horizonte al mediodía solar.<br><br>
+        <span style="color:#64748b;font-size:0.72rem">
+          Regla empírica: tilt ≈ |latitud| ± 5° según temporada prioritaria.
+          El motor Jensen optimiza integrando los 12 días representativos ASHRAE.
+        </span>
+      `;
+    }
+
+    // ── Tabla mensual ───────────────────────────────────────────────────────
+    const tbody = document.getElementById('monthly-solar-tbody');
+    if (tbody) {
+      let best_cos = -Infinity, best_m = 0;
+      const rows = MONTH_DAYS.map((n, m) => {
+        const delta  = declination(n);
+        const alpha  = solarNoonElevation(lat, delta);
+        const theta  = incidenceAngle(lat, delta, tilt_opt);
+        const cos_t  = parseFloat(Math.max(0, Math.cos(theta)).toFixed(3));
+        if (cos_t > best_cos) { best_cos = cos_t; best_m = m; }
+        return { m, delta: (delta/DEG).toFixed(2), alpha: (alpha/DEG).toFixed(2),
+                 theta: (theta/DEG).toFixed(2), cos_t };
+      });
+      tbody.innerHTML = rows.map(r => `
+        <tr class="${r.m === best_m ? 'best-month' : ''}">
+          <td><strong>${MONTHS[r.m]}</strong></td>
+          <td>${r.delta}°</td>
+          <td>${r.alpha}°</td>
+          <td>${r.theta}°</td>
+          <td>${r.cos_t}</td>
+        </tr>
+      `).join('');
+    }
+
+    // ── Barras de progreso ──────────────────────────────────────────────────
+    const currentTilt = parseFloat(document.getElementById('tilt-angle')?.value || tilt_opt);
+    const diff = Math.abs(currentTilt - tilt_opt);
+    setVal('bar-tilt-lbl', currentTilt.toFixed(0) + '°');
+    setVal('bar-diff-lbl', diff.toFixed(1) + '° de diferencia');
+    const tiltBar = document.getElementById('bar-tilt-fill');
+    const diffBar = document.getElementById('bar-diff-fill');
+    if (tiltBar) tiltBar.style.width = (currentTilt / 90 * 100).toFixed(1) + '%';
+    if (diffBar) diffBar.style.width = Math.min(diff / 45 * 100, 100).toFixed(1) + '%';
+
+    // ── Guardar resultado para Excel ────────────────────────────────────────
+    window._optimalAngles = {
+      lat, lon,
+      tilt_opt, azimuth_opt,
+      hemisferio,
+      zenith_solsticio: zenith_solsticio.toFixed(2),
+      elev_solsticio:   elev_solsticio.toFixed(2),
+      elev_equinoccio:  elev_equinoccio.toFixed(2),
+      irrad_est,
+      monthly_table: MONTH_DAYS.map((n, m) => {
+        const delta = declination(n);
+        const alpha = solarNoonElevation(lat, delta);
+        const theta = incidenceAngle(lat, delta, tilt_opt);
+        return {
+          mes: MONTHS[m],
+          declinacion: (delta/DEG).toFixed(2),
+          elevacion: (alpha/DEG).toFixed(2),
+          angulo_incidencia: (theta/DEG).toFixed(2),
+          cos_theta: Math.max(0, Math.cos(theta)).toFixed(4),
+        };
+      }),
+    };
+  }
+
+  // ─── Botón "Aplicar ángulos óptimos" ────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    // Calcular al cargar con valores por defecto
+    computeAndRender();
+
+    // Recalcular al cambiar lat / lon
+    ['input-lat', 'input-lon'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', computeAndRender);
+    });
+
+    // Recalcular cuando cambie el tilt en el formulario (para barras)
+    const tiltEl = document.getElementById('tilt-angle');
+    if (tiltEl) tiltEl.addEventListener('input', computeAndRender);
+
+    // Botón aplicar
+    const applyBtn = document.getElementById('btn-apply-angles');
+    if (applyBtn) {
+      applyBtn.addEventListener('click', () => {
+        if (!window._optimalAngles) return;
+        const { tilt_opt, azimuth_opt } = window._optimalAngles;
+
+        const tiltEl   = document.getElementById('tilt-angle');
+        const tiltVal  = document.getElementById('tilt-val');
+        const azimEl   = document.getElementById('input-azimuth');
+
+        if (tiltEl) {
+          tiltEl.value = tilt_opt;
+          if (tiltVal) tiltVal.textContent = tilt_opt.toFixed(1) + '°';
+        }
+        if (azimEl) azimEl.value = azimuth_opt;
+
+        // Feedback visual
+        applyBtn.textContent = '✅ ¡Aplicado correctamente!';
+        applyBtn.style.color = '#6ee7b7';
+        setTimeout(() => {
+          applyBtn.innerHTML = '✅ Aplicar ángulos óptimos al formulario';
+          applyBtn.style.color = '';
+        }, 2200);
+
+        computeAndRender();
+      });
+    }
+
+    // ─── Geolocalización GPS ──────────────────────────────────────────────
+    const geoBtn    = document.getElementById('btn-geolocate');
+    const geoStatus = document.getElementById('geo-status');
+
+    if (geoBtn) {
+      geoBtn.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+          if (geoStatus) { geoStatus.className = 'geo-status err'; geoStatus.textContent = '⚠️ Tu navegador no soporta geolocalización.'; }
+          return;
+        }
+        geoBtn.classList.add('loading');
+        geoBtn.textContent = '⏳ Obteniendo ubicación…';
+        if (geoStatus) { geoStatus.className = 'geo-status'; geoStatus.textContent = ''; }
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude, altitude, accuracy } = pos.coords;
+            document.getElementById('input-lat').value = latitude.toFixed(6);
+            document.getElementById('input-lon').value = longitude.toFixed(6);
+            if (altitude !== null && altitude !== undefined) {
+              document.getElementById('input-alt').value = Math.round(altitude);
+            }
+            geoBtn.classList.remove('loading');
+            geoBtn.innerHTML = '<span>📡</span> Usar mi ubicación actual (GPS)';
+            if (geoStatus) {
+              geoStatus.className = 'geo-status ok';
+              geoStatus.textContent =
+                `✅ Ubicación obtenida: ${latitude.toFixed(5)}°, ${longitude.toFixed(5)}°` +
+                ` (±${Math.round(accuracy)} m)`;
+            }
+            computeAndRender();
+          },
+          (err) => {
+            geoBtn.classList.remove('loading');
+            geoBtn.innerHTML = '<span>📡</span> Usar mi ubicación actual (GPS)';
+            const msgs = {
+              1: 'Permiso denegado. Activa la ubicación en tu navegador.',
+              2: 'Posición no disponible. Verifica tu conexión o GPS.',
+              3: 'Tiempo de espera agotado. Intenta de nuevo.',
+            };
+            if (geoStatus) {
+              geoStatus.className = 'geo-status err';
+              geoStatus.textContent = '⚠️ ' + (msgs[err.code] || 'Error desconocido.');
+            }
+          },
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+        );
+      });
+    }
+  });
+
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PARCHE EXCEL: incluir hoja de Ángulos Óptimos en la descarga
+     Intercepta el botón de descarga para agregar la hoja de ángulos.
+════════════════════════════════════════════════════════════════════════════ -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Esperamos a que solar_app.js registre el listener original primero
+  const dlBtn = document.getElementById('btn-download');
+  if (!dlBtn) return;
+
+  // Usamos capture=true para ejecutar ANTES del listener existente y
+  // añadir los datos de ángulos al payload que se enviará al servidor.
+  // El Excel real lo genera app.py; aquí solo garantizamos que
+  // window._optimalAngles esté disponible para solar_app.js si lo usa.
+  // La hoja de ángulos se genera en app.py (ver endpoint /api/download/excel).
+  // Para que el backend reciba los datos, los metemos en sessionStorage
+  // antes de la petición.
+  dlBtn.addEventListener('click', () => {
+    if (window._optimalAngles) {
+      try {
+        sessionStorage.setItem('optimal_angles_data', JSON.stringify(window._optimalAngles));
+      } catch(e) {}
+    }
+  }, true);
+});
+</script>
 </body>
 </html>

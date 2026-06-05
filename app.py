@@ -1,13 +1,19 @@
 """
-app.py — Servidor Flask para el Motor Solar Fotovoltaico.
+app.py v2.1 — Servidor Flask para el Motor Solar Fotovoltaico mejorado.
+
 Endpoints:
-  GET  /              → index.html
-  POST /api/demand    → perfil de demanda (nuevos parámetros)
-  POST /api/solar     → motor Jensen
-  GET  /api/download  → Excel con todos los datos
+  GET  /                        → index.html
+  GET  /api/plant_types         → tipos de planta industrial disponibles
+  GET  /api/climate_cities      → ciudades climáticas disponibles
+  POST /api/demand              → perfil de demanda (35,040 pts)
+  POST /api/solar               → motor Jensen v2 (con pérdidas, baterías, cortes)
+  POST /api/optimal_angles      → ángulos óptimos de instalación por lat/lon
+  GET  /api/download/excel      → Excel con todos los datos (6 hojas)
+  GET  /api/glossary            → glosario de parámetros y resultados (JSON)
 """
 
 import io
+import math
 import datetime
 import traceback
 import numpy as np
@@ -16,90 +22,302 @@ from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 
 from demand_profile import generate_demand_profile, PLANT_PROFILES
-from solar_engine import run_solar_engine
+from solar_engine import run_solar_engine, get_climate_cities
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
-_cache = {}   # sesión simple en memoria
-
+_cache = {}
 DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
+GLOSSARY = {
+    "parametros_entrada": {
+        "lat":               {"desc": "Latitud geográfica [°]. Norte positivo. Ej: 25.67 para Monterrey.", "unidad": "°"},
+        "lon":               {"desc": "Longitud geográfica [°]. Oeste negativo. Ej: -100.31 para Monterrey.", "unidad": "°"},
+        "alt":               {"desc": "Altitud sobre el nivel del mar [m]. Influye en la masa de aire y la irradiancia.", "unidad": "m"},
+        "eta":               {"desc": "Eficiencia eléctrica del panel en condiciones estándar STC (25 °C, 1000 W/m²). Ej: 0.20 = 20 %.", "unidad": "fracción 0-1"},
+        "area_m2":           {"desc": "Área activa de un panel solar [m²]. Ej: 2.0 m².", "unidad": "m²"},
+        "n_panels":          {"desc": "Número de paneles en el arreglo fotovoltaico.", "unidad": "unidades"},
+        "tilt":              {"desc": "Ángulo de inclinación del panel respecto a la horizontal [°]. 0 = horizontal, 90 = vertical.", "unidad": "°"},
+        "azimuth":           {"desc": "Orientación del panel desde el Norte en sentido horario [°]. 0=N, 90=E, 180=S (óptimo en hemisferio Norte), 270=O.", "unidad": "°"},
+        "p_nominal_w":       {"desc": "Potencia nominal (pico) de un panel en STC [W]. Ej: 400 W.", "unidad": "W"},
+        "loss_wiring":       {"desc": "Pérdidas por resistencia del cableado DC y AC. Típico: 0.02–0.03 (2–3 %).", "unidad": "fracción 0-1"},
+        "loss_inverter":     {"desc": "Pérdidas en el inversor (conversión DC→AC). Típico: 0.02–0.04 (2–4 %).", "unidad": "fracción 0-1"},
+        "loss_dirt":         {"desc": "Pérdidas por suciedad o polvo sobre los paneles. Típico: 0.02–0.05 (2–5 %).", "unidad": "fracción 0-1"},
+        "loss_mismatch":     {"desc": "Pérdidas por variación entre paneles del mismo arreglo (mismatch). Típico: 0.01–0.02.", "unidad": "fracción 0-1"},
+        "loss_shading":      {"desc": "Pérdidas por sombras sobre el arreglo (edificios, árboles). Típico: 0.00–0.10.", "unidad": "fracción 0-1"},
+        "NOCT":              {"desc": "Temperatura de Operación Nominal de Celda [°C] (condiciones NOCT: 800 W/m², 20 °C, 1 m/s). Típico: 44–48 °C.", "unidad": "°C"},
+        "T_coeff":           {"desc": "Coeficiente de temperatura de potencia [%/°C]. Negativo: a mayor temperatura, menor potencia. Monocristalino ≈ -0.40 %/°C.", "unidad": "%/°C"},
+        "wind_speed":        {"desc": "Velocidad media del viento en el sitio [m/s]. Mejora el enfriamiento convectivo del panel.", "unidad": "m/s"},
+        "humidity_pct":      {"desc": "Humedad relativa media del ambiente [%]. Modifica la capacidad calorífica del aire y el enfriamiento del panel.", "unidad": "%"},
+        "battery_kwh":       {"desc": "Capacidad total útil del banco de baterías [kWh]. 0 = sin baterías.", "unidad": "kWh"},
+        "battery_eta":       {"desc": "Eficiencia round-trip del banco (carga + descarga). Típico: 0.90–0.95 para Li-Ion.", "unidad": "fracción 0-1"},
+        "battery_dod":       {"desc": "Profundidad de descarga máxima permitida. Ej: 0.80 = se puede usar hasta el 80 % de la capacidad.", "unidad": "fracción 0-1"},
+        "battery_cycles":    {"desc": "Vida útil del banco en ciclos completos de carga/descarga. Li-Ion NMC ≈ 3000–6000, LFP ≈ 5000–8000.", "unidad": "ciclos"},
+        "battery_cost_kwh":  {"desc": "Costo de adquisición de la batería por kWh instalado [USD/kWh]. LFP ≈ 250–400 USD/kWh (2024).", "unidad": "USD/kWh"},
+        "battery_install_pct": {"desc": "Costo de instalación como fracción del costo de equipo. Típico: 0.20–0.35 (20–35 % adicional).", "unidad": "fracción 0-1"},
+        "outage_freq_yr":    {"desc": "Número esperado de cortes de energía de la red por año.", "unidad": "cortes/año"},
+        "outage_avg_h":      {"desc": "Duración media de cada corte de energía [horas].", "unidad": "horas"},
+        "outage_loss_pct":   {"desc": "Porcentaje de la demanda no cubierta durante los cortes cuando el sistema solar + baterías es insuficiente.", "unidad": "%"},
+        "climate_city":      {"desc": "Clave de ciudad de la base de datos climática interna. Si se proporciona, sobreescribe lat/lon/alt/wind/humidity.", "unidad": "texto"},
+        "panel_cost_usd":    {"desc": "Costo de adquisición de un panel solar [USD]. Para cálculo de CAPEX.", "unidad": "USD/panel"},
+        "inverter_cost_usd": {"desc": "Costo del inversor [USD]. Para cálculo de CAPEX.", "unidad": "USD"},
+    },
+    "resultados": {
+        "energia_anual_kWh":         {"desc": "Energía eléctrica total neta generada en el año [kWh].", "unidad": "kWh/año"},
+        "energia_anual_MWh":         {"desc": "Energía eléctrica total neta en MWh.", "unidad": "MWh/año"},
+        "p_max_kW":                  {"desc": "Potencia pico real alcanzada por el arreglo durante el año [kW].", "unidad": "kW"},
+        "p_nominal_total_kW":        {"desc": "Potencia nominal total del sistema = n_paneles × p_nominal_W / 1000 [kWp].", "unidad": "kWp"},
+        "factor_capacidad_pct":      {"desc": "Factor de capacidad = E_anual / (P_nominal × 8760 h) × 100. Mide qué tan bien se aprovecha la capacidad instalada.", "unidad": "%"},
+        "horas_pico_sol_equiv":      {"desc": "Horas Pico Solar Equivalente (HSP o PSH) = E_anual / P_nominal. Número de horas a plena potencia equivalentes.", "unidad": "h/año"},
+        "irrad_horizontal_kWh_m2":   {"desc": "Irradiación total anual en plano horizontal [kWh/m²·año].", "unidad": "kWh/m²·año"},
+        "irrad_poa_kWh_m2":          {"desc": "Irradiación total anual en el Plano del Arreglo (POA) [kWh/m²·año].", "unidad": "kWh/m²·año"},
+        "gtot_max_W_m2":             {"desc": "Irradiancia POA máxima registrada en el año [W/m²].", "unidad": "W/m²"},
+        "gtot_media_W_m2":           {"desc": "Irradiancia POA media en horas de sol [W/m²].", "unidad": "W/m²"},
+        "n_horas_generacion":        {"desc": "Número de horas al año con generación fotovoltaica positiva.", "unidad": "h/año"},
+        "T_cell_media_C":            {"desc": "Temperatura media de celda durante horas de sol [°C].", "unidad": "°C"},
+        "T_cell_max_C":              {"desc": "Temperatura máxima de celda alcanzada en el año [°C].", "unidad": "°C"},
+        "perdida_termica_pct":       {"desc": "Pérdida porcentual anual de energía debida al efecto de temperatura sobre los paneles.", "unidad": "%"},
+        "perdida_sistema_pct":       {"desc": "Pérdida total del sistema (cableado + inversor + suciedad + mismatch + sombras) [%].", "unidad": "%"},
+        "performance_ratio_pct":     {"desc": "Performance Ratio (PR) = factor de rendimiento neto del sistema respecto al nominal. Típico: 75–85 %.", "unidad": "%"},
+        "battery_energy_stored_kWh": {"desc": "Energía total cargada en el banco de baterías durante el año [kWh].", "unidad": "kWh/año"},
+        "battery_energy_served_kWh": {"desc": "Energía total descargada / entregada por las baterías al año [kWh].", "unidad": "kWh/año"},
+        "battery_cycles_used":       {"desc": "Ciclos equivalentes de carga/descarga usados en el año.", "unidad": "ciclos/año"},
+        "battery_life_years":        {"desc": "Vida útil estimada del banco de baterías basada en la tasa de ciclado anual [años].", "unidad": "años"},
+        "battery_capex_usd":         {"desc": "CAPEX total del banco de baterías (equipo + instalación) [USD].", "unidad": "USD"},
+        "outage_hours_yr":           {"desc": "Horas totales de corte de energía esperadas por año.", "unidad": "h/año"},
+        "outage_energy_lost_kWh":    {"desc": "Energía estimada no servida (pérdidas) por cortes de energía al año [kWh].", "unidad": "kWh/año"},
+        "total_capex_usd":           {"desc": "CAPEX total del sistema: paneles + inversor + baterías [USD].", "unidad": "USD"},
+    }
+}
 
-# ─── Frontend ────────────────────────────────────────────────────────────────
+
+# ─── Frontend ─────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
 
 
-# ─── Tipos de planta disponibles ─────────────────────────────────────────────
+# ─── Glosario ─────────────────────────────────────────────────────────────────
+@app.route('/api/glossary', methods=['GET'])
+def api_glossary():
+    return jsonify({'ok': True, 'glossary': GLOSSARY})
+
+
+# ─── Ángulos Óptimos ──────────────────────────────────────────────────────────
+# Física astronómica: declinación de Spencer + geometría de plano inclinado
+# ─────────────────────────────────────────────────────────────────────────────
+_DEG = math.pi / 180
+_MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+_MONTH_DAYS = [17, 47, 75, 105, 135, 162, 198, 228, 258, 288, 318, 344]
+
+def _declination_rad(n: int) -> float:
+    """Declinación solar [rad] — ecuación de Spencer."""
+    return 23.45 * _DEG * math.sin(2 * math.pi * (n - 81) / 365)
+
+def _solar_noon_elevation_rad(lat_deg: float, delta_rad: float) -> float:
+    """Elevación solar al mediodía solar (ω=0) [rad]."""
+    phi = lat_deg * _DEG
+    sin_a = math.sin(phi)*math.sin(delta_rad) + math.cos(phi)*math.cos(delta_rad)
+    return math.asin(max(-1.0, min(1.0, sin_a)))
+
+def _incidence_angle_rad(lat_deg: float, delta_rad: float, tilt_deg: float) -> float:
+    """
+    Ángulo de incidencia [rad] en el plano inclinado al mediodía solar,
+    orientación óptima (hacia el ecuador).
+    cos θ = sin δ · sin(φ − β) + cos δ · cos(φ − β)
+    """
+    phi  = lat_deg * _DEG
+    beta = tilt_deg * _DEG
+    cos_t = (math.sin(delta_rad) * math.sin(phi - beta) +
+             math.cos(delta_rad) * math.cos(phi - beta))
+    return math.acos(max(-1.0, min(1.0, cos_t)))
+
+def _optimal_tilt(lat_deg: float) -> float:
+    """Tilt óptimo anual [°] maximizando ∑cos(θ) para los 12 días ASHRAE."""
+    best_tilt, best_sum = 0.0, -1.0
+    for t_half in range(0, 181):       # 0° a 90° en pasos de 0.5°
+        t = t_half * 0.5
+        s = 0.0
+        for n in _MONTH_DAYS:
+            delta = _declination_rad(n)
+            alpha = _solar_noon_elevation_rad(lat_deg, delta)
+            if alpha <= 0:
+                continue
+            theta = _incidence_angle_rad(lat_deg, delta, t)
+            ct = math.cos(theta)
+            if ct > 0:
+                s += ct
+        if s > best_sum:
+            best_sum, best_tilt = s, t
+    return round(best_tilt * 2) / 2   # redondeo a 0.5°
+
+def _estimate_annual_irrad(lat_deg: float, tilt_deg: float) -> float:
+    """
+    Irradiación anual en POA [kWh/m²·año] — modelo Jensen simplificado
+    con integración horaria en cada día representativo ASHRAE.
+    """
+    GSC = 1367.0
+    days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    total = 0.0
+    phi  = lat_deg * _DEG
+    beta = tilt_deg * _DEG
+    for m, n in enumerate(_MONTH_DAYS):
+        delta = _declination_rad(n)
+        Eo    = 1.0 + 0.033 * math.cos(2 * math.pi * n / 365)
+        cos_ws = -math.tan(phi) * math.tan(delta)
+        if cos_ws >= 1.0:
+            continue
+        omega_s = math.acos(max(-1.0, min(1.0, cos_ws)))
+        N_steps = 48
+        daily = 0.0
+        for i in range(N_steps + 1):
+            omega = -omega_s + (i / N_steps) * 2 * omega_s
+            sin_a = (math.sin(phi)*math.sin(delta) +
+                     math.cos(phi)*math.cos(delta)*math.cos(omega))
+            if sin_a <= 0:
+                continue
+            alpha = math.asin(max(-1.0, min(1.0, sin_a)))
+            AM    = 1.0 / math.sin(alpha)
+            tau_b = 0.7 ** (AM ** 0.678)
+            G0    = GSC * Eo * math.sin(alpha)
+            Gb_h  = max(0.0, G0 * tau_b)
+            Gd_h  = max(0.0, G0 * (1 - tau_b) * 0.5)
+            cos_t = (math.sin(delta)*math.sin(phi - beta) +
+                     math.cos(delta)*math.cos(phi - beta)*math.cos(omega))
+            Rb    = (cos_t / math.sin(alpha)
+                     if (cos_t > 0 and math.sin(alpha) > 0.01) else 0.0)
+            Gb_poa = max(0.0, Gb_h * Rb)
+            Gd_poa = Gd_h * (1 + math.cos(beta)) / 2.0
+            Gr_poa = (Gb_h + Gd_h) * 0.20 * (1 - math.cos(beta)) / 2.0
+            daily += max(0.0, Gb_poa + Gd_poa + Gr_poa)
+        daylight_h = omega_s / math.pi * 24.0
+        daily_avg  = daily / (N_steps + 1)
+        total += daily_avg * daylight_h * days_in_month[m] / 1000.0
+    return round(total, 1)
+
+
+@app.route('/api/optimal_angles', methods=['POST'])
+def api_optimal_angles():
+    """
+    POST { lat, lon }
+    Devuelve los ángulos óptimos de instalación y métricas solares por latitud.
+    """
+    try:
+        d   = request.get_json(force=True)
+        lat = float(d.get('lat', 25.67))
+        lon = float(d.get('lon', -100.31))
+        lat = float(np.clip(lat, -90, 90))
+
+        tilt_opt     = _optimal_tilt(lat)
+        azimuth_opt  = 180.0 if lat >= 0 else 0.0
+        hemisferio   = 'Norte' if lat >= 0 else 'Sur'
+
+        # Ángulos solares en solsticio de verano (jun 21 ≈ n=172) y equinoccio
+        delta_solst = _declination_rad(172)
+        delta_equin = _declination_rad(80)
+        elev_solst  = _solar_noon_elevation_rad(lat, delta_solst) / _DEG
+        elev_equin  = _solar_noon_elevation_rad(lat, delta_equin) / _DEG
+        zenith_solst = 90.0 - elev_solst
+
+        irrad_est   = _estimate_annual_irrad(lat, tilt_opt)
+
+        # Tabla mensual
+        monthly = []
+        for m, n in enumerate(_MONTH_DAYS):
+            delta = _declination_rad(n)
+            alpha = _solar_noon_elevation_rad(lat, delta) / _DEG
+            theta = _incidence_angle_rad(lat, delta, tilt_opt) / _DEG
+            cos_t = max(0.0, math.cos(theta * _DEG))
+            monthly.append({
+                'mes'              : _MONTHS_ES[m],
+                'dia_repr'         : n,
+                'declinacion_deg'  : round(delta / _DEG, 2),
+                'elevacion_solar_deg': round(alpha, 2),
+                'angulo_incidencia_deg': round(theta, 2),
+                'cos_theta'        : round(cos_t, 4),
+            })
+
+        result = {
+            'lat'                    : lat,
+            'lon'                    : lon,
+            'hemisferio'             : hemisferio,
+            'tilt_optimo_deg'        : tilt_opt,
+            'azimuth_optimo_deg'     : azimuth_opt,
+            'azimuth_optimo_desc'    : f"{azimuth_opt:.0f}° — {'Sur (óptimo hemisferio Norte)' if lat >= 0 else 'Norte (óptimo hemisferio Sur)'}",
+            'elevacion_solsticio_deg': round(elev_solst, 2),
+            'elevacion_equinoccio_deg': round(elev_equin, 2),
+            'angulo_cenital_solsticio_deg': round(zenith_solst, 2),
+            'irradiacion_poa_anual_kWh_m2': irrad_est,
+            'regla_practica'         : f"Tilt ≈ {abs(lat):.1f}° (latitud) ajustado a {tilt_opt:.1f}° para máxima captación anual",
+            'monthly_table'          : monthly,
+        }
+
+        _cache['optimal_angles'] = result
+        return jsonify({'ok': True, **result})
+
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 400
+
+
+# ─── Tipos de planta ──────────────────────────────────────────────────────────
 @app.route('/api/plant_types', methods=['GET'])
 def api_plant_types():
     return jsonify({
         'ok': True,
-        'types': [
-            {'key': k, 'name': v['name'], 'desc': v['desc']}
-            for k, v in PLANT_PROFILES.items()
-        ]
+        'types': [{'key': k, 'name': v['name'], 'desc': v['desc']}
+                  for k, v in PLANT_PROFILES.items()]
     })
 
 
-# ─── Perfil de Demanda ───────────────────────────────────────────────────────
+# ─── Ciudades climáticas ──────────────────────────────────────────────────────
+@app.route('/api/climate_cities', methods=['GET'])
+def api_climate_cities():
+    return jsonify({'ok': True, 'cities': get_climate_cities()})
+
+
+# ─── Perfil de Demanda ────────────────────────────────────────────────────────
 @app.route('/api/demand', methods=['POST'])
 def api_demand():
     try:
-        d = request.get_json(force=True)
-
-        Pmax             = float(d.get('pmax_kW', 50))
-        FC               = float(d.get('fc_planta', 0.60))
-        FP               = float(d.get('fp_potencia', 0.85))
-        n_shifts         = int(d.get('n_shifts', 2))
-        plant_type       = str(d.get('plant_type', 'manufactura_ligera'))
-        weekend_factor   = float(d.get('weekend_op_factor', 0.50))
-        summer_boost     = float(d.get('summer_boost', 1.10))
-
-        # Validaciones
-        Pmax           = max(1.0, Pmax)
-        FC             = float(np.clip(FC, 0.40, 0.90))
-        FP             = float(np.clip(FP, 0.60, 1.00))
-        n_shifts       = int(np.clip(n_shifts, 1, 3))
-        weekend_factor = float(np.clip(weekend_factor, 0.0, 1.0))
-        summer_boost   = float(np.clip(summer_boost, 1.0, 1.50))
+        d            = request.get_json(force=True)
+        Pmax         = max(1.0, float(d.get('pmax_kW', 50)))
+        FC           = float(np.clip(float(d.get('fc_planta', 0.60)), 0.40, 0.90))
+        FP           = float(np.clip(float(d.get('fp_potencia', 0.85)), 0.60, 1.00))
+        n_shifts     = int(np.clip(int(d.get('n_shifts', 2)), 1, 3))
+        plant_type   = str(d.get('plant_type', 'manufactura_ligera'))
+        weekend_f    = float(np.clip(float(d.get('weekend_op_factor', 0.50)), 0.0, 1.0))
+        summer_boost = float(np.clip(float(d.get('summer_boost', 1.10)), 1.0, 1.50))
 
         result = generate_demand_profile(
-            Pmax_kW=Pmax,
-            FC_planta=FC,
-            FP_potencia=FP,
-            n_shifts=n_shifts,
-            plant_type=plant_type,
-            weekend_op_factor=weekend_factor,
-            summer_boost=summer_boost,
+            Pmax_kW=Pmax, FC_planta=FC, FP_potencia=FP,
+            n_shifts=n_shifts, plant_type=plant_type,
+            weekend_op_factor=weekend_f, summer_boost=summer_boost,
         )
-
         _cache['demand'] = result
 
         return jsonify({
             'ok': True,
-            'monthly_avg'    : result['monthly_avg'],
-            'monthly_max'    : result['monthly_max'],
-            'monthly_min'    : result['monthly_min'],
-            'monthly_kWh'    : result['monthly_kWh'],
-            'daily_profile'  : result['daily_weekday'],
-            'daily_weekend'  : result['daily_weekend'],
-            'stats'          : result['stats'],
+            'monthly_avg'  : result['monthly_avg'],
+            'monthly_max'  : result['monthly_max'],
+            'monthly_min'  : result['monthly_min'],
+            'monthly_kWh'  : result['monthly_kWh'],
+            'daily_profile': result['daily_weekday'],
+            'daily_weekend': result['daily_weekend'],
+            'stats'        : result['stats'],
         })
-
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e),
-                        'trace': traceback.format_exc()}), 400
+        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 400
 
 
-# ─── Motor Solar ─────────────────────────────────────────────────────────────
+# ─── Motor Solar v2 ───────────────────────────────────────────────────────────
 @app.route('/api/solar', methods=['POST'])
 def api_solar():
     try:
         d = request.get_json(force=True)
 
+        # Parámetros básicos
         lat         = float(np.clip(float(d.get('lat', 25.67)), -90, 90))
         lon         = float(d.get('lon', -100.31))
         alt         = float(d.get('alt', 538))
@@ -110,10 +328,59 @@ def api_solar():
         azimuth     = float(d.get('azimuth', 180.0))
         p_nominal_w = float(d.get('p_nominal_w', 400))
 
-        result = run_solar_engine(lat, lon, alt, eta, area_m2,
-                                  n_panels, tilt, azimuth, p_nominal_w)
+        # Pérdidas del sistema
+        loss_wiring   = float(np.clip(float(d.get('loss_wiring',   0.02)), 0, 0.20))
+        loss_inverter = float(np.clip(float(d.get('loss_inverter', 0.03)), 0, 0.15))
+        loss_dirt     = float(np.clip(float(d.get('loss_dirt',     0.03)), 0, 0.20))
+        loss_mismatch = float(np.clip(float(d.get('loss_mismatch', 0.01)), 0, 0.10))
+        loss_shading  = float(np.clip(float(d.get('loss_shading',  0.00)), 0, 0.50))
 
-        # Balance si hay demanda en caché
+        # Modelo térmico
+        NOCT       = float(d.get('NOCT', 45.0))
+        T_coeff    = float(d.get('T_coeff', -0.40))
+        wind_speed = float(d.get('wind_speed', 3.0))
+        humidity   = float(d.get('humidity_pct', 55.0))
+
+        # Baterías
+        battery_kwh         = float(d.get('battery_kwh', 0.0))
+        battery_eta         = float(np.clip(float(d.get('battery_eta', 0.92)), 0.70, 0.99))
+        battery_dod         = float(np.clip(float(d.get('battery_dod', 0.80)), 0.20, 1.00))
+        battery_cycles      = int(d.get('battery_cycles', 4000))
+        battery_cost_kwh    = float(d.get('battery_cost_kwh', 300.0))
+        battery_install_pct = float(d.get('battery_install_pct', 0.25))
+
+        # Cortes de energía
+        outage_freq    = float(d.get('outage_freq_yr', 0.0))
+        outage_avg_h   = float(d.get('outage_avg_h', 2.0))
+        outage_loss_pct= float(d.get('outage_loss_pct', 80.0))
+
+        # Clima
+        climate_city   = d.get('climate_city', None)
+
+        # Costos
+        panel_cost     = float(d.get('panel_cost_usd', 0.0))
+        inverter_cost  = float(d.get('inverter_cost_usd', 0.0))
+
+        result = run_solar_engine(
+            lat=lat, lon=lon, alt=alt, eta=eta, area_m2=area_m2,
+            n_panels=n_panels, tilt=tilt, azimuth=azimuth,
+            p_nominal_w=p_nominal_w,
+            loss_wiring=loss_wiring, loss_inverter=loss_inverter,
+            loss_dirt=loss_dirt, loss_mismatch=loss_mismatch,
+            loss_shading=loss_shading,
+            NOCT=NOCT, T_coeff=T_coeff,
+            wind_speed=wind_speed, humidity_pct=humidity,
+            battery_kwh=battery_kwh, battery_eta=battery_eta,
+            battery_dod=battery_dod, battery_cycles=battery_cycles,
+            battery_cost_kwh=battery_cost_kwh,
+            battery_install_pct=battery_install_pct,
+            outage_freq_yr=outage_freq, outage_avg_h=outage_avg_h,
+            outage_loss_pct=outage_loss_pct,
+            climate_city=climate_city,
+            panel_cost_usd=panel_cost, inverter_cost_usd=inverter_cost,
+        )
+
+        # Balance con demanda (si existe en caché)
         balance = None
         if 'demand' in _cache:
             dem_arr = np.array(_cache['demand']['demand_kW'])
@@ -128,10 +395,10 @@ def api_solar():
             idx = 0
             for nd in DAYS_IN_MONTH:
                 np_ = nd * 96
-                eg = float(np.sum(gen_arr[idx:idx+np_]) * 0.25)
-                ed = float(np.sum(dem_arr[idx:idx+np_]) * 0.25)
+                eg  = float(np.sum(gen_arr[idx:idx + np_]) * 0.25)
+                ed  = float(np.sum(dem_arr[idx:idx + np_]) * 0.25)
                 monthly_balance.append(round(eg - ed, 2))
-                monthly_cob.append(round(min(eg/ed*100, 100) if ed > 0 else 0, 2))
+                monthly_cob.append(round(min(eg / ed * 100, 100) if ed > 0 else 0, 2))
                 idx += np_
 
             balance = {
@@ -147,40 +414,39 @@ def api_solar():
         _cache['solar'] = result
 
         return jsonify({
-            'ok'               : True,
-            'monthly_gtot_avg' : result['monthly_gtot_avg'],
-            'monthly_gtot_max' : result['monthly_gtot_max'],
-            'monthly_gen_kWh'  : result['monthly_gen_kWh'],
-            'daily_gtot_summer': result['daily_gtot_summer'],
-            'daily_p_summer'   : result['daily_p_summer'],
-            'stats'            : result['stats'],
-            'balance'          : balance,
+            'ok'                 : True,
+            'monthly_gtot_avg'   : result['monthly_gtot_avg'],
+            'monthly_gtot_max'   : result['monthly_gtot_max'],
+            'monthly_gen_kWh'    : result['monthly_gen_kWh'],
+            'monthly_bat_charge' : result['monthly_bat_charge'],
+            'monthly_bat_discharge': result['monthly_bat_discharge'],
+            'daily_gtot_summer'  : result['daily_gtot_summer'],
+            'daily_p_summer'     : result['daily_p_summer'],
+            'stats'              : result['stats'],
+            'balance'            : balance,
         })
 
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e),
-                        'trace': traceback.format_exc()}), 400
+        return jsonify({'ok': False, 'error': str(e), 'trace': traceback.format_exc()}), 400
 
 
-# ─── Descarga Excel ──────────────────────────────────────────────────────────
+# ─── Descarga Excel ───────────────────────────────────────────────────────────
 @app.route('/api/download/excel', methods=['GET'])
 def api_download_excel():
     if 'solar' not in _cache:
-        return jsonify({'ok': False,
-                        'error': 'Ejecuta primero el Motor Solar.'}), 400
+        return jsonify({'ok': False, 'error': 'Ejecuta primero el Motor Solar.'}), 400
 
     import openpyxl
-    from openpyxl.styles import (PatternFill, Font, Alignment,
-                                  Border, Side, numbers)
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
-    from openpyxl.chart import BarChart, LineChart, Reference
 
     solar  = _cache['solar']
     demand = _cache.get('demand')
-
     hours  = solar['hours']
     Gtot   = solar['Gtot_arr']
     P_kw   = solar['P_kw_arr']
+    P_gross= solar['P_kw_gross_arr']
+    T_cell = solar['T_cell_arr']
     dem_kw = demand['demand_kW'] if demand else [0] * len(hours)
 
     base_dt = datetime.datetime(2024, 1, 1, 0, 0)
@@ -189,313 +455,407 @@ def api_download_excel():
 
     wb = openpyxl.Workbook()
 
-    # ── Estilos comunes ──
-    HDR_FILL   = PatternFill("solid", fgColor="0D1526")
-    COL_FILLS  = {
-        'fecha'  : PatternFill("solid", fgColor="111827"),
-        'irrad'  : PatternFill("solid", fgColor="1a1f0a"),
-        'gen'    : PatternFill("solid", fgColor="0a1a14"),
-        'dem'    : PatternFill("solid", fgColor="1a100a"),
-        'bal'    : PatternFill("solid", fgColor="0a0a1a"),
+    HDR_FILL  = PatternFill("solid", fgColor="0D1526")
+    HDR_FONT  = Font(name='Calibri', bold=True, color='F97316', size=10)
+    DATA_FONT = Font(name='Calibri', size=9)
+    TITLE_FONT= Font(name='Calibri', bold=True, color='FBBF24', size=13)
+    thin      = Side(style='thin', color='1E293B')
+    border    = Border(left=thin, right=thin, top=thin, bottom=thin)
+    COL_FILLS = {
+        'fecha': PatternFill("solid", fgColor="111827"),
+        'irrad': PatternFill("solid", fgColor="1a1f0a"),
+        'gen'  : PatternFill("solid", fgColor="0a1a14"),
+        'dem'  : PatternFill("solid", fgColor="1a100a"),
+        'bal'  : PatternFill("solid", fgColor="0a0a1a"),
+        'temp' : PatternFill("solid", fgColor="1a0a0a"),
     }
-    HDR_FONT   = Font(name='Calibri', bold=True, color='F97316', size=10)
-    DATA_FONT  = Font(name='Calibri', size=9)
-    TITLE_FONT = Font(name='Calibri', bold=True, color='FBBF24', size=13)
-    KPI_FONT   = Font(name='Calibri', bold=True, color='F1F5F9', size=11)
-    thin       = Side(style='thin', color='1E293B')
-    border     = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     def hdr(ws, row, col, val, fill=None):
         c = ws.cell(row=row, column=col, value=val)
-        c.font  = HDR_FONT
-        c.fill  = fill or HDR_FILL
-        c.alignment = Alignment(horizontal='center', vertical='center',
-                                 wrap_text=True)
-        c.border = border
-        return c
+        c.font = HDR_FONT; c.fill = fill or HDR_FILL
+        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c.border = border; return c
 
-    def data_cell(ws, row, col, val, fmt=None, fill=None):
+    def dc(ws, row, col, val, fmt=None, fill=None):
         c = ws.cell(row=row, column=col, value=val)
-        c.font   = DATA_FONT
-        c.border = border
+        c.font = DATA_FONT; c.border = border
         if fill: c.fill = fill
         if fmt:  c.number_format = fmt
         return c
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # HOJA 1 — Parámetros
-    # ══════════════════════════════════════════════════════════════════════════
-    ws1 = wb.active
-    ws1.title = '1. Parámetros'
+    # ── Hoja 1: Parámetros ────────────────────────────────────────────────────
+    ws1 = wb.active; ws1.title = '1. Parámetros'
     ws1.sheet_view.showGridLines = False
-    ws1.column_dimensions['A'].width = 36
-    ws1.column_dimensions['B'].width = 22
+    ws1.column_dimensions['A'].width = 38
+    ws1.column_dimensions['B'].width = 24
 
     s = solar['stats']
-    title = ws1.cell(row=1, column=1,
-                     value='Motor Solar FV — Parámetros de Simulación')
-    title.font = TITLE_FONT
-    ws1.merge_cells('A1:B1')
+    t = ws1.cell(row=1, column=1, value='Motor Solar FV v2 — Parámetros')
+    t.font = TITLE_FONT; ws1.merge_cells('A1:B1')
 
     params = [
         ('── SISTEMA PV ──', ''),
-        ('Latitud',            f"{s['lat']} °"),
-        ('Longitud',           f"{s['lon']} °"),
-        ('Altitud',            f"{s['alt']} m s.n.m."),
-        ('Eficiencia del panel η', f"{s['eta']*100:.1f} %"),
-        ('Área del panel',     f"{s['area_m2']} m²"),
-        ('Potencia nominal',   f"{s['potencia_nominal_W_panel']} W"),
-        ('Número de paneles',  s['n_paneles']),
-        ('Inclinación (tilt)', f"{s['tilt']} °"),
-        ('Azimut',             f"{s['azimuth']} °"),
+        ('Latitud',                  f"{s['lat']} °"),
+        ('Longitud',                 f"{s['lon']} °"),
+        ('Altitud',                  f"{s['alt']} m s.n.m."),
+        ('Ciudad climática',         s.get('climate_city', 'manual')),
+        ('Eficiencia STC (η)',        f"{s['eta']*100:.1f} %"),
+        ('Área por panel',           f"{s['area_m2']} m²"),
+        ('Potencia nominal / panel', f"{s['potencia_nominal_W_panel']} W"),
+        ('Número de paneles',        s['n_paneles']),
+        ('Inclinación (tilt)',       f"{s['tilt']} °"),
+        ('Azimut',                   f"{s['azimuth']} °"),
         ('', ''),
+        ('── MODELO TÉRMICO ──', ''),
+        ('NOCT',                     f"{s.get('NOCT', 45.0)} °C"),
+        ('Coef. temperatura',        f"{s.get('T_coeff_pct_C', -0.40)} %/°C"),
+        ('Velocidad de viento',      f"{s.get('wind_speed_ms', 3.0)} m/s"),
+        ('Humedad relativa',         f"{s.get('humidity_pct', 55.0)} %"),
+        ('Temperatura ambiente media', f"{s.get('T_amb_avg_C', 20.0)} °C"),
+        ('', ''),
+        ('── PÉRDIDAS DEL SISTEMA ──', ''),
+        ('Pérd. cableado',           f"{s.get('loss_wiring_pct', 2.0)} %"),
+        ('Pérd. inversor',           f"{s.get('loss_inverter_pct', 3.0)} %"),
+        ('Pérd. suciedad',           f"{s.get('loss_dirt_pct', 3.0)} %"),
+        ('Pérd. mismatch',           f"{s.get('loss_mismatch_pct', 1.0)} %"),
+        ('Pérd. sombras',            f"{s.get('loss_shading_pct', 0.0)} %"),
+        ('Performance Ratio (PR)',   f"{s.get('performance_ratio_pct', 91.0):.1f} %"),
+        ('', ''),
+        ('── BATERÍAS ──', ''),
+        ('Capacidad del banco',      f"{s.get('battery_kwh', 0.0):.1f} kWh"),
+        ('Eficiencia round-trip',    f"{s.get('battery_eta_rt', 0.92)*100:.0f} %"),
+        ('CAPEX baterías',           f"USD {s.get('battery_capex_usd', 0.0):,.0f}"),
+        ('Vida útil estimada',       f"{s.get('battery_life_years', 0.0):.1f} años"),
+        ('', ''),
+        ('── CORTES DE ENERGÍA ──', ''),
+        ('Frecuencia de cortes',     f"{s.get('outage_freq_yr', 0.0):.1f} /año"),
+        ('Duración media de corte',  f"{s.get('outage_avg_h', 0.0):.1f} h"),
+        ('Horas de corte / año',     f"{s.get('outage_hours_yr', 0.0):.2f} h"),
+        ('', ''),
+        ('── CAPEX TOTAL ──', ''),
+        ('CAPEX paneles',            f"USD {s.get('panel_cost_usd', 0.0):,.0f}"),
+        ('CAPEX inversor',           f"USD {s.get('inverter_cost_usd', 0.0):,.0f}"),
+        ('CAPEX baterías',           f"USD {s.get('battery_capex_usd', 0.0):,.0f}"),
+        ('CAPEX TOTAL',              f"USD {s.get('total_capex_usd', 0.0):,.0f}"),
     ]
     if demand:
         ds = demand['stats']
         params += [
+            ('', ''),
             ('── PLANTA INDUSTRIAL ──', ''),
-            ('Tipo de planta',      ds.get('plant_name', '—')),
-            ('Demanda máxima',      f"{ds['pmax_kW']:.1f} kW"),
-            ('Turnos de operación', ds.get('n_shifts', '—')),
-            ('Factor de carga',     f"{ds['FC_planta']*100:.0f} %"),
-            ('Factor de potencia',  f"{ds['FP_potencia']:.2f}"),
-            ('Op. fin de semana',   f"{ds.get('weekend_op_factor',0)*100:.0f} %"),
-            ('Boost verano',        f"×{ds.get('summer_boost',1):.2f}"),
+            ('Tipo de planta',       ds.get('plant_name', '—')),
+            ('Demanda máxima',       f"{ds['pmax_kW']:.1f} kW"),
+            ('Turnos de operación',  ds.get('n_shifts', '—')),
+            ('Factor de carga',      f"{ds['FC_planta']*100:.0f} %"),
+            ('Factor de potencia',   f"{ds['FP_potencia']:.2f}"),
         ]
 
     for i, (k, v) in enumerate(params, start=3):
-        c_k = ws1.cell(row=i, column=1, value=k)
-        c_v = ws1.cell(row=i, column=2, value=v)
+        ck = ws1.cell(row=i, column=1, value=k)
+        cv = ws1.cell(row=i, column=2, value=v)
         if k.startswith('──'):
-            c_k.font = Font(name='Calibri', bold=True, color='F97316', size=10)
-            c_v.value = ''
+            ck.font = Font(name='Calibri', bold=True, color='F97316', size=10)
+            cv.value = ''
         else:
-            c_k.font  = DATA_FONT
-            c_v.font  = Font(name='Calibri', bold=True, color='F1F5F9', size=9)
-        for c in [c_k, c_v]:
-            c.border    = border
-            c.alignment = Alignment(vertical='center')
+            ck.font = DATA_FONT
+            cv.font = Font(name='Calibri', bold=True, color='F1F5F9', size=9)
+        for c in [ck, cv]:
+            c.border = border; c.alignment = Alignment(vertical='center')
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # HOJA 2 — KPIs / Resumen Ejecutivo
-    # ══════════════════════════════════════════════════════════════════════════
+    # ── Hoja 2: KPIs ──────────────────────────────────────────────────────────
     ws2 = wb.create_sheet('2. KPIs')
     ws2.sheet_view.showGridLines = False
-    ws2.column_dimensions['A'].width = 38
-    ws2.column_dimensions['B'].width = 20
+    ws2.column_dimensions['A'].width = 40
+    ws2.column_dimensions['B'].width = 22
     ws2.column_dimensions['C'].width = 14
+    t2 = ws2.cell(row=1, column=1, value='Resumen Ejecutivo — KPIs del Sistema v2')
+    t2.font = TITLE_FONT; ws2.merge_cells('A1:C1')
 
-    t2 = ws2.cell(row=1, column=1, value='Resumen Ejecutivo — KPIs del Sistema')
-    t2.font = TITLE_FONT
-    ws2.merge_cells('A1:C1')
-
-    kpis_solar = [
+    kpis = [
         ('☀️  GENERACIÓN SOLAR', '', ''),
         ('Energía anual generada', f"{s['energia_anual_kWh']:,.0f}", 'kWh/año'),
         ('Energía anual generada', f"{s['energia_anual_MWh']:,.2f}", 'MWh/año'),
         ('Potencia pico del sistema', f"{s['p_nominal_total_kW']:,.2f}", 'kWp'),
         ('Potencia máxima generada', f"{s['p_max_kW']:,.2f}", 'kW'),
         ('Factor de capacidad', f"{s['factor_capacidad_pct']:,.2f}", '%'),
-        ('Horas pico solar equiv.', f"{s['horas_pico_sol_equiv']:,.0f}", 'hrs/año'),
-        ('Horas con generación > 0', f"{s['n_horas_generacion']:,.0f}", 'hrs/año'),
+        ('Horas pico solar equiv.', f"{s['horas_pico_sol_equiv']:,.0f}", 'h/año'),
+        ('Horas con generación > 0', f"{s['n_horas_generacion']:,.0f}", 'h/año'),
         ('Irradiación horizontal', f"{s['irrad_horizontal_kWh_m2']:,.0f}", 'kWh/m²·año'),
-        ('Irradiación POA total', f"{s['irrad_poa_kWh_m2']:,.0f}", 'kWh/m²·año'),
-        ('Irradiancia POA máxima', f"{s['gtot_max_W_m2']:,.1f}", 'W/m²'),
-        ('Irradiancia POA media (días sol.)', f"{s['gtot_media_W_m2']:,.1f}", 'W/m²'),
+        ('Irradiación POA', f"{s['irrad_poa_kWh_m2']:,.0f}", 'kWh/m²·año'),
+        ('', '', ''),
+        ('🌡️  TEMPERATURA Y PÉRDIDAS', '', ''),
+        ('Temp. celda media (horas sol)', f"{s.get('T_cell_media_C',0):.1f}", '°C'),
+        ('Temp. celda máxima', f"{s.get('T_cell_max_C',0):.1f}", '°C'),
+        ('Pérdida térmica anual', f"{s.get('perdida_termica_pct',0):.2f}", '%'),
+        ('Pérdida de sistema (PR)', f"{s.get('perdida_sistema_pct',0):.2f}", '%'),
+        ('Performance Ratio', f"{s.get('performance_ratio_pct',0):.2f}", '%'),
+        ('', '', ''),
+        ('🔋  BATERÍAS', '', ''),
+        ('Capacidad del banco', f"{s.get('battery_kwh',0):.1f}", 'kWh'),
+        ('Energía almacenada / año', f"{s.get('battery_energy_stored_kWh',0):,.0f}", 'kWh/año'),
+        ('Energía servida / año', f"{s.get('battery_energy_served_kWh',0):,.0f}", 'kWh/año'),
+        ('Ciclos usados / año', f"{s.get('battery_cycles_used',0):.1f}", 'ciclos/año'),
+        ('Vida útil estimada', f"{s.get('battery_life_years',0):.1f}", 'años'),
+        ('CAPEX baterías', f"USD {s.get('battery_capex_usd',0):,.0f}", 'USD'),
+        ('', '', ''),
+        ('⚡  CORTES DE ENERGÍA', '', ''),
+        ('Horas de corte / año', f"{s.get('outage_hours_yr',0):.2f}", 'h/año'),
+        ('Energía no servida', f"{s.get('outage_energy_lost_kWh',0):,.0f}", 'kWh/año'),
+        ('', '', ''),
+        ('💰  CAPEX DEL SISTEMA', '', ''),
+        ('CAPEX paneles', f"USD {s.get('panel_cost_usd',0):,.0f}", 'USD'),
+        ('CAPEX inversor', f"USD {s.get('inverter_cost_usd',0):,.0f}", 'USD'),
+        ('CAPEX baterías', f"USD {s.get('battery_capex_usd',0):,.0f}", 'USD'),
+        ('CAPEX TOTAL', f"USD {s.get('total_capex_usd',0):,.0f}", 'USD'),
     ]
 
     if demand:
         ds = demand['stats']
-        kpis_solar += [
-            ('', '', ''),
-            ('🏭  DEMANDA INDUSTRIAL', '', ''),
-            ('Energía demandada anual', f"{ds['energia_anual_kWh']:,.0f}", 'kWh/año'),
-            ('Demanda media', f"{ds['p_media_kW']:,.2f}", 'kW'),
-            ('Demanda máxima real', f"{ds['p_max_real_kW']:,.2f}", 'kW'),
-            ('Factor de carga real', f"{ds['factor_carga_real']*100:,.1f}", '%'),
-            ('Horas equiv. plena carga', f"{ds['horas_punta_equiv']:,.0f}", 'hrs/año'),
-        ]
-
-    if 'balance' in (solar if False else {}):
-        pass  # balance se calcula en caché aparte
-
-    # Calcular balance aquí para KPIs
-    if demand:
         dem_arr = np.array(demand['demand_kW'])
-        gen_arr = np.array(P_kw)
+        gen_arr = np.array(solar['P_kw_arr'])
         e_dem   = float(np.sum(dem_arr) * 0.25)
         e_gen   = float(np.sum(gen_arr) * 0.25)
         cob     = min(e_gen / e_dem * 100, 100) if e_dem > 0 else 0
         exceso  = float(np.sum(np.maximum(gen_arr - dem_arr, 0)) * 0.25)
         deficit = float(np.sum(np.maximum(dem_arr - gen_arr, 0)) * 0.25)
-        kpis_solar += [
+        kpis += [
             ('', '', ''),
-            ('⚡  BALANCE ENERGÉTICO', '', ''),
-            ('Cobertura solar de demanda', f"{cob:.1f}", '%'),
-            ('Energía cubierta por solar', f"{min(e_gen,e_dem):,.0f}", 'kWh/año'),
-            ('Excedente solar (inyección red)', f"{exceso:,.0f}", 'kWh/año'),
-            ('Déficit (energía de la red)', f"{deficit:,.0f}", 'kWh/año'),
+            ('🏭  DEMANDA Y BALANCE', '', ''),
+            ('Energía demandada', f"{e_dem:,.0f}", 'kWh/año'),
+            ('Cobertura solar', f"{cob:.1f}", '%'),
+            ('Excedente solar', f"{exceso:,.0f}", 'kWh/año'),
+            ('Déficit (red)', f"{deficit:,.0f}", 'kWh/año'),
         ]
 
-    hdr(ws2, 2, 1, 'Indicador')
-    hdr(ws2, 2, 2, 'Valor')
-    hdr(ws2, 2, 3, 'Unidad')
-
-    for i, (k, v, u) in enumerate(kpis_solar, start=3):
-        if k.endswith('──') or k.endswith('SOLAR') or k.endswith('INDUSTRIAL') or k.endswith('ENERGÉTICO'):
+    hdr(ws2, 2, 1, 'Indicador'); hdr(ws2, 2, 2, 'Valor'); hdr(ws2, 2, 3, 'Unidad')
+    for i, (k, v, u) in enumerate(kpis, start=3):
+        if any(k.endswith(x) for x in ['SOLAR','TEMPERATURA Y PÉRDIDAS','BATERÍAS',
+                                        'CORTES DE ENERGÍA','CAPEX DEL SISTEMA','DEMANDA Y BALANCE']):
             c = ws2.cell(row=i, column=1, value=k)
             c.font = Font(name='Calibri', bold=True, color='F97316', size=10)
-            c.fill = PatternFill("solid", fgColor="0D1526")
-            ws2.merge_cells(f'A{i}:C{i}')
-            c.border = border
+            c.fill = HDR_FILL; ws2.merge_cells(f'A{i}:C{i}'); c.border = border
         else:
-            data_cell(ws2, i, 1, k)
-            c = data_cell(ws2, i, 2, v)
+            dc(ws2, i, 1, k)
+            c = dc(ws2, i, 2, v)
             c.alignment = Alignment(horizontal='right')
             c.font = Font(name='Calibri', bold=True, color='FBBF24', size=9)
-            data_cell(ws2, i, 3, u)
+            dc(ws2, i, 3, u)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # HOJA 3 — Resumen Mensual
-    # ══════════════════════════════════════════════════════════════════════════
-    ws3 = wb.create_sheet('3. Resumen Mensual')
+    # ── Hoja 3: Ángulos Óptimos de Instalación ───────────────────────────────
+    ws_ang = wb.create_sheet('3. Ángulos Óptimos')
+    ws_ang.sheet_view.showGridLines = False
+    ws_ang.column_dimensions['A'].width = 40
+    ws_ang.column_dimensions['B'].width = 26
+
+    t_ang = ws_ang.cell(row=1, column=1,
+        value='Ángulos Óptimos de Instalación — Análisis Astronómico Solar')
+    t_ang.font = TITLE_FONT
+    ws_ang.merge_cells('A1:B1')
+
+    oa = _cache.get('optimal_angles') or {}
+    # Si no hay caché de optimal_angles, recalcular en el momento con los stats del solar
+    if not oa and 'solar' in _cache:
+        sv = _cache['solar']['stats']
+        lat_oa = sv.get('lat', 25.67)
+        lon_oa = sv.get('lon', -100.31)
+        try:
+            tilt_oa = _optimal_tilt(lat_oa)
+            az_oa   = 180.0 if lat_oa >= 0 else 0.0
+            hem_oa  = 'Norte' if lat_oa >= 0 else 'Sur'
+            delta_s = _declination_rad(172)
+            delta_e = _declination_rad(80)
+            elev_s  = _solar_noon_elevation_rad(lat_oa, delta_s) / _DEG
+            elev_e  = _solar_noon_elevation_rad(lat_oa, delta_e) / _DEG
+            irr_oa  = _estimate_annual_irrad(lat_oa, tilt_oa)
+            oa = {
+                'lat': lat_oa, 'lon': lon_oa, 'hemisferio': hem_oa,
+                'tilt_optimo_deg': tilt_oa, 'azimuth_optimo_deg': az_oa,
+                'azimuth_optimo_desc': f"{az_oa:.0f}° — {'Sur' if lat_oa>=0 else 'Norte'} (hemisferio {hem_oa})",
+                'elevacion_solsticio_deg': round(elev_s, 2),
+                'elevacion_equinoccio_deg': round(elev_e, 2),
+                'angulo_cenital_solsticio_deg': round(90 - elev_s, 2),
+                'irradiacion_poa_anual_kWh_m2': irr_oa,
+                'regla_practica': f"Tilt ≈ {abs(lat_oa):.1f}° ajustado a {tilt_oa:.1f}°",
+                'monthly_table': [
+                    {
+                        'mes': _MONTHS_ES[m],
+                        'declinacion_deg': round(_declination_rad(n) / _DEG, 2),
+                        'elevacion_solar_deg': round(_solar_noon_elevation_rad(lat_oa, _declination_rad(n)) / _DEG, 2),
+                        'angulo_incidencia_deg': round(_incidence_angle_rad(lat_oa, _declination_rad(n), tilt_oa) / _DEG, 2),
+                        'cos_theta': round(max(0, math.cos(_incidence_angle_rad(lat_oa, _declination_rad(n), tilt_oa))), 4),
+                    }
+                    for m, n in enumerate(_MONTH_DAYS)
+                ],
+            }
+        except Exception:
+            pass
+
+    ang_params = [
+        ('── UBICACIÓN ──', ''),
+        ('Latitud analizada',          f"{oa.get('lat', '—')} °"),
+        ('Longitud',                   f"{oa.get('lon', '—')} °"),
+        ('Hemisferio',                 oa.get('hemisferio', '—')),
+        ('', ''),
+        ('── ÁNGULOS ÓPTIMOS ──', ''),
+        ('Tilt óptimo anual',          f"{oa.get('tilt_optimo_deg', '—')} °"),
+        ('Azimut óptimo',              oa.get('azimuth_optimo_desc', '—')),
+        ('Regla práctica',             oa.get('regla_practica', '—')),
+        ('', ''),
+        ('── ÁNGULOS SOLARES CLAVE ──', ''),
+        ('Elevación solar (21 Jun, mediodía)', f"{oa.get('elevacion_solsticio_deg', '—')} °"),
+        ('Elevación solar (21 Mar, mediodía)', f"{oa.get('elevacion_equinoccio_deg', '—')} °"),
+        ('Ángulo cenital solar (21 Jun)',      f"{oa.get('angulo_cenital_solsticio_deg', '—')} °"),
+        ('', ''),
+        ('── IRRADIACIÓN ESTIMADA ──', ''),
+        ('Irradiación POA anual (tilt óptimo)', f"{oa.get('irradiacion_poa_anual_kWh_m2', '—')} kWh/m²·año"),
+        ('Modelo utilizado',           'Jensen simplificado — τ_b = 0.7^(AM^0.678)'),
+        ('Componente difusa',          'Modelo isotrópico de Hottel-Woertz'),
+        ('Albedo suelo',               '0.20 (suelo natural)'),
+    ]
+
+    for i, (k, v) in enumerate(ang_params, start=3):
+        ck = ws_ang.cell(row=i, column=1, value=k)
+        cv = ws_ang.cell(row=i, column=2, value=v)
+        if k.startswith('──'):
+            ck.font = Font(name='Calibri', bold=True, color='10B981', size=10)
+            ck.fill = PatternFill("solid", fgColor="0a1a14")
+            cv.value = ''
+        else:
+            ck.font = DATA_FONT
+            cv.font = Font(name='Calibri', bold=True, color='6EE7B7', size=9)
+        for c in [ck, cv]:
+            c.border = border
+            c.alignment = Alignment(vertical='center')
+
+    # Sub-tabla mensual de ángulos en la misma hoja
+    monthly_tbl = oa.get('monthly_table', [])
+    if monthly_tbl:
+        row_off = len(ang_params) + 4
+        t_m = ws_ang.cell(row=row_off, column=1,
+            value='Perfil Mensual — Ángulos Solares al Mediodía Solar')
+        t_m.font = Font(name='Calibri', bold=True, color='10B981', size=11)
+        ws_ang.merge_cells(f'A{row_off}:F{row_off}')
+
+        ang_hdrs = ['Mes','Día Repr.','Declinación δ [°]',
+                    'Elevación Solar α [°]','Ángulo Incidencia θ [°]','cos(θ)']
+        ang_cols = ['A','B','C','D','E','F']
+        col_widths_ang = [16, 12, 20, 22, 24, 12]
+        for ci, (h, col, w) in enumerate(zip(ang_hdrs, ang_cols, col_widths_ang), 1):
+            hdr(ws_ang, row_off + 1, ci, h)
+            ws_ang.column_dimensions[col].width = w
+
+        for ri, row_d in enumerate(monthly_tbl):
+            r = row_off + 2 + ri
+            vals = [
+                row_d.get('mes', ''),
+                row_d.get('dia_repr', ''),
+                row_d.get('declinacion_deg', ''),
+                row_d.get('elevacion_solar_deg', ''),
+                row_d.get('angulo_incidencia_deg', ''),
+                row_d.get('cos_theta', ''),
+            ]
+            best_cos_row = max(monthly_tbl, key=lambda x: x.get('cos_theta', 0)) if monthly_tbl else {}
+            is_best = row_d.get('mes') == best_cos_row.get('mes')
+            for ci, val in enumerate(vals, 1):
+                c = dc(ws_ang, r, ci, val,
+                       fmt='0.00' if ci > 1 else None,
+                       fill=PatternFill("solid", fgColor="0a1a14"))
+                if is_best:
+                    c.font = Font(name='Calibri', bold=True, color='FBBF24', size=9)
+
+    # ── Hoja 4 (antes 3): Resumen Mensual ────────────────────────────────────
+    ws3 = wb.create_sheet('4. Resumen Mensual')
     ws3.sheet_view.showGridLines = False
     MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
-    t3 = ws3.cell(row=1, column=1, value='Resumen Mensual — Irradiancia, Generación y Demanda')
-    t3.font = TITLE_FONT
-    ws3.merge_cells('A1:H1')
-
-    headers3 = ['Mes', 'Irrad. POA Avg\n[W/m²]', 'Irrad. POA Máx\n[W/m²]',
-                 'Generación\n[kWh/mes]', 'Generación\n[MWh/mes]',
-                 'Demanda\n[kWh/mes]', 'Demanda\n[MWh/mes]', 'Cobertura\n[%]']
+                 'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+    t3 = ws3.cell(row=1, column=1, value='Resumen Mensual — Generación, Temperatura y Balance')
+    t3.font = TITLE_FONT; ws3.merge_cells('A1:I1')
+    headers3 = ['Mes','Irrad. POA Avg\n[W/m²]','Irrad. POA Máx\n[W/m²]',
+                'Gen. Neta\n[kWh/mes]','Bat. Cargada\n[kWh/mes]',
+                'Bat. Descargada\n[kWh/mes]','Demanda\n[kWh/mes]',
+                'Cobertura\n[%]','Balance\n[kWh/mes]']
     for ci, h in enumerate(headers3, 1):
         hdr(ws3, 2, ci, h)
         ws3.column_dimensions[get_column_letter(ci)].width = 16
 
-    # Calcular demanda mensual
+    dem_mon = [0] * 12
     if demand:
-        dem_arr  = np.array(demand['demand_kW'])
-        dem_mon  = []
-        idx = 0
-        for nd in DAYS_IN_MONTH:
-            seg = dem_arr[idx:idx+nd*96]
-            dem_mon.append(float(np.sum(seg) * 0.25))
-            idx += nd * 96
-    else:
-        dem_mon = [0] * 12
+        dem_arr = np.array(demand['demand_kW'])
+        idx_ = 0
+        for mi_, nd in enumerate(DAYS_IN_MONTH):
+            seg = dem_arr[idx_:idx_ + nd * 96]
+            dem_mon[mi_] = float(np.sum(seg) * 0.25)
+            idx_ += nd * 96
+
+    bat_ch  = solar.get('monthly_bat_charge',   [0]*12)
+    bat_dis = solar.get('monthly_bat_discharge', [0]*12)
 
     for mi, mes in enumerate(MONTHS_ES):
         r   = mi + 3
         gen = solar['monthly_gen_kWh'][mi]
         dem = dem_mon[mi]
         cob = min(gen / dem * 100, 100) if dem > 0 else 0
-        row_data = [
-            mes,
-            round(solar['monthly_gtot_avg'][mi], 1),
-            round(solar['monthly_gtot_max'][mi], 1),
-            round(gen, 0),
-            round(gen / 1000, 3),
-            round(dem, 0),
-            round(dem / 1000, 3),
-            round(cob, 1),
-        ]
-        fills3 = [None, COL_FILLS['irrad'], COL_FILLS['irrad'],
-                  COL_FILLS['gen'],  COL_FILLS['gen'],
-                  COL_FILLS['dem'],  COL_FILLS['dem'],
-                  COL_FILLS['bal']]
-        fmts3  = [None, '#,##0.0', '#,##0.0',
-                  '#,##0', '#,##0.000',
-                  '#,##0', '#,##0.000', '0.0"%"']
-        for ci, (val, fill, fmt) in enumerate(zip(row_data, fills3, fmts3), 1):
-            c = data_cell(ws3, r, ci, val, fmt=fmt, fill=fill)
-            if ci == 1:
-                c.font = Font(name='Calibri', bold=True, color='F1F5F9', size=9)
+        row_d = [mes,
+                 round(solar['monthly_gtot_avg'][mi], 1),
+                 round(solar['monthly_gtot_max'][mi], 1),
+                 round(gen, 0),
+                 round(bat_ch[mi], 2),
+                 round(bat_dis[mi], 2),
+                 round(dem, 0),
+                 round(cob, 1),
+                 round(gen - dem, 0)]
+        fills = [None, COL_FILLS['irrad'], COL_FILLS['irrad'],
+                 COL_FILLS['gen'],  COL_FILLS['gen'],  COL_FILLS['gen'],
+                 COL_FILLS['dem'],  COL_FILLS['bal'],  COL_FILLS['bal']]
+        fmts  = [None,'#,##0.0','#,##0.0','#,##0','#,##0.00','#,##0.00',
+                 '#,##0','0.0"%"','#,##0']
+        for ci, (val, fill, fmt) in enumerate(zip(row_d, fills, fmts), 1):
+            c = dc(ws3, r, ci, val, fmt=fmt, fill=fill)
+            if ci == 1: c.font = Font(name='Calibri', bold=True, color='F1F5F9', size=9)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # HOJA 4 — Datos Anuales (35,040 filas)
-    # ══════════════════════════════════════════════════════════════════════════
-    ws4 = wb.create_sheet('4. Datos Anuales (15-min)')
+    # ── Hoja 5 (antes 4): Datos Anuales ──────────────────────────────────────
+    ws4 = wb.create_sheet('5. Datos Anuales (15-min)')
     ws4.sheet_view.showGridLines = False
-
-    headers4 = ['Fecha-Hora', 'Irradiancia POA\n[W/m²]',
-                 'Generación PV\n[kW]', 'Demanda\n[kW]',
-                 'Balance\n[kW]']
-    col_widths4 = [18, 18, 15, 15, 15]
-    for ci, (h, w) in enumerate(zip(headers4, col_widths4), 1):
+    headers4 = ['Fecha-Hora','Irrad. POA\n[W/m²]','Gen. Neta\n[kW]',
+                'Gen. Bruta\n[kW]','T. Celda\n[°C]','Demanda\n[kW]','Balance\n[kW]']
+    col_w4   = [18, 15, 13, 13, 11, 13, 13]
+    for ci, (h, w) in enumerate(zip(headers4, col_w4), 1):
         hdr(ws4, 1, ci, h)
         ws4.column_dimensions[get_column_letter(ci)].width = w
-
-    fills4 = [COL_FILLS['fecha'], COL_FILLS['irrad'],
-              COL_FILLS['gen'],   COL_FILLS['dem'],   COL_FILLS['bal']]
-    fmts4  = [None, '#,##0.0', '#,##0.00', '#,##0.00', '#,##0.00']
-
-    dem_kw_arr = dem_kw if demand else [0] * len(hours)
-
-    for i, (f, g, p, dm) in enumerate(zip(fechas, Gtot, P_kw, dem_kw_arr), start=2):
-        bal = p - dm
-        row_vals = [f, round(g, 2), round(p, 4), round(dm, 4), round(bal, 4)]
-        for ci, (val, fill, fmt) in enumerate(zip(row_vals, fills4, fmts4), 1):
-            data_cell(ws4, i, ci, val, fmt=fmt, fill=fill)
-
-    # Congelar primera fila de datos
     ws4.freeze_panes = 'A2'
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # HOJA 5 — Perfil Diario
-    # ══════════════════════════════════════════════════════════════════════════
-    ws5 = wb.create_sheet('5. Perfil Diario')
-    ws5.sheet_view.showGridLines = False
+    fills4 = [COL_FILLS['fecha'], COL_FILLS['irrad'],
+              COL_FILLS['gen'],   COL_FILLS['gen'],
+              COL_FILLS['temp'],  COL_FILLS['dem'],  COL_FILLS['bal']]
+    fmts4  = [None,'#,##0.0','#,##0.00','#,##0.00','#,##0.0','#,##0.00','#,##0.00']
 
-    t5 = ws5.cell(row=1, column=1, value='Perfil Diario Promedio — Generación vs. Demanda')
-    t5.font = TITLE_FONT
-    ws5.merge_cells('A1:E1')
+    dem_kw_arr = dem_kw if demand else [0.0] * len(hours)
+    T_arr  = solar.get('T_cell_arr', [0.0] * len(hours))
 
-    hours_96 = [f"{h//4:02d}:{(h%4)*15:02d}" for h in range(96)]
-    headers5 = ['Hora', 'Gen. PV Verano\n[kW]', 'Dem. Laboral\n[kW]',
-                'Dem. Fin de Semana\n[kW]', 'Balance Laboral\n[kW]']
-    for ci, h in enumerate(headers5, 1):
-        hdr(ws5, 2, ci, h)
-        ws5.column_dimensions[get_column_letter(ci)].width = 18
+    for i, (f, g, p, pg, tc, dm) in enumerate(
+            zip(fechas, Gtot, P_kw, P_gross, T_arr, dem_kw_arr), start=2):
+        bal = p - dm
+        row_v = [f, round(g,2), round(p,4), round(pg,4), round(tc,1), round(dm,4), round(bal,4)]
+        for ci, (val, fill, fmt) in enumerate(zip(row_v, fills4, fmts4), 1):
+            dc(ws4, i, ci, val, fmt=fmt, fill=fill)
 
-    gp_summer  = solar['daily_p_summer']
-    dw_weekday = demand['daily_weekday'] if demand else [0]*96
-    dw_weekend = demand['daily_weekend'] if demand else [0]*96
-
-    for i, (hr, gp, dwd, dwe) in enumerate(
-            zip(hours_96, gp_summer, dw_weekday, dw_weekend), start=3):
-        bal = gp - dwd
-        ws5.cell(row=i, column=1, value=hr).font = DATA_FONT
-        for ci, val in enumerate([gp, dwd, dwe, bal], start=2):
-            c = data_cell(ws5, i, ci, round(val, 3), fmt='#,##0.000')
-            if ci == 5:  # balance: verde si >0, rojo si <0
-                c.font = Font(name='Calibri', size=9,
-                               color='10B981' if val >= 0 else 'EF4444', bold=True)
-
-    # ── Guardar y enviar ──────────────────────────────────────────────────────
+    # ── Guardar ───────────────────────────────────────────────────────────────
     buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
-    return send_file(
-        buf,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name='Motor_Solar_FV_Resultados.xlsx'
-    )
+    wb.save(buf); buf.seek(0)
+    return send_file(buf,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True,
+                     download_name='Motor_Solar_FV_v2_Resultados.xlsx')
 
 
-# ─── CSV legacy (por compatibilidad) ─────────────────────────────────────────
 @app.route('/api/download', methods=['GET'])
 def api_download_csv():
     return api_download_excel()
 
 
-# ─── Arranque ─────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     print("=" * 60)
-    print("  Motor Solar Fotovoltaico — Servidor Flask")
+    print("  Motor Solar Fotovoltaico v2 — Servidor Flask")
     print("  Abrir en navegador: http://localhost:5000")
     print("=" * 60)
     app.run(debug=True, port=5000, use_reloader=False)
