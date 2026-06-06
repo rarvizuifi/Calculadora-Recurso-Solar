@@ -19,7 +19,7 @@
   --accent-red:     #ef4444;
   --text-primary:   #f1f5f9;
   --text-secondary: #94a3b8;
-  --text-muted:     #4b5563;
+  --text-muted:     #64748b;
   --border:         rgba(255, 255, 255, 0.08);
   --border-accent:  rgba(249, 115, 22, 0.40);
   --glow-orange:    0 0 30px rgba(249, 115, 22, 0.25);
@@ -47,6 +47,27 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-dark); }
 ::-webkit-scrollbar-thumb { background: var(--accent-orange); border-radius: 3px; }
+
+/* ── Tipografía base ─────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+}
+p { margin: 0; color: var(--text-secondary); }
+a { color: var(--accent-orange); text-decoration: none; transition: var(--transition); }
+a:hover { color: var(--accent-gold); }
+strong, b { font-weight: 600; color: var(--text-primary); }
+em, i { font-style: italic; }
+small { font-size: 0.85em; }
+
+/* ── Inputs base (por si acaso queda algún reset) ────────────────────────── */
+input, select, textarea, button {
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+}
 
 /* ── Navbar ──────────────────────────────────────────────────────────────── */
 .navbar {
@@ -182,6 +203,32 @@ body {
   flex-wrap: wrap;
 }
 
+/* Indicador de scroll animado */
+.hero-scroll-hint {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  animation: bounceHint 2s ease-in-out infinite;
+}
+.scroll-arrow {
+  font-size: 1.2rem;
+  color: var(--accent-orange);
+  opacity: 0.7;
+}
+@keyframes bounceHint {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%       { transform: translateX(-50%) translateY(8px); }
+}
+
 /* ── Botones ─────────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
@@ -257,6 +304,7 @@ body {
 .tag-blue   { background: rgba(59,130,246,0.12);  color: var(--accent-blue);   }
 .tag-green  { background: rgba(16,185,129,0.12);  color: var(--accent-green);  }
 .tag-gold   { background: rgba(251,191,36,0.12);  color: var(--accent-gold);   }
+.tag-red    { background: rgba(239,68,68,0.12);   color: #ef4444;              }
 
 .section-title {
   font-size: clamp(1.6rem, 3vw, 2.2rem);
@@ -687,6 +735,87 @@ footer a:hover { text-decoration: underline; }
   transform: translateY(0);
 }
 
+/* Hero content visible inmediatamente (sin esperar scroll) */
+.hero-content.fade-in {
+  animation: fadeInHero 0.8s ease forwards;
+}
+@keyframes fadeInHero {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Toggle Switch ───────────────────────────────────────────────────────── */
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  top: 2px;
+  background: #94a3b8;
+  border-radius: 50%;
+  transition: var(--transition);
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: rgba(249,115,22,0.25);
+  border-color: rgba(249,115,22,0.5);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+  background: var(--accent-orange);
+  box-shadow: 0 0 8px rgba(249,115,22,0.5);
+}
+.toggle-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* ── Year card values (investment recovery) ──────────────────────────────── */
+.year-card-val {
+  font-family: 'JetBrains Mono', monospace;
+  transition: color 0.3s;
+}
+.year-card-val.positive { color: #10b981; }
+.year-card-val.negative { color: #ef4444; }
+
+/* ── Toggle visible state ────────────────────────────────────────────────── */
+.stats-summary.visible { display: block; }
+.kpi-grid.visible { display: grid; }
+
+/* Fix: economic kpis grid */
+#economic-kpis-box { display: none; }
+#economic-kpis-box.visible { display: grid; }
+
+/* Fix: cfe breakdown hidden by default */
+#cfe-breakdown-box { display: none; }
+#cfe-breakdown-box.visible { display: block; }
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .navbar { padding: 0.75rem 1.25rem; }
@@ -694,4 +823,11 @@ footer a:hover { text-decoration: underline; }
   .section { padding: 3.5rem 1.25rem; }
   .form-grid { grid-template-columns: 1fr; }
   .hero-title { font-size: 2.2rem; }
+  .angles-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Print safe scrollbar ────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
 }

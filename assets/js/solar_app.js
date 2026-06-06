@@ -244,6 +244,29 @@ function initSliders() {
     { slider: 'degradacion-pct',  display: 'degradacion-pct-val',  suffix: '%',     multiplier: 100, decimals: 1 },
     { slider: 'wacc',             display: 'wacc-val',             suffix: '%',     multiplier: 100, decimals: 1 },
     { slider: 'inflacion-tarifa', display: 'inflacion-tarifa-val', suffix: '%',     multiplier: 100, decimals: 1 },
+    { slider: 'outage-freq',      display: 'outage-freq-val',      suffix: ' eventos', multiplier: 1, decimals: 0 },
+    { slider: 'outage-dur',       display: 'outage-dur-val',       suffix: ' horas', multiplier: 1, decimals: 2 },
+    { slider: 'merma-maint-freq', display: 'merma-maint-freq-val', suffix: ' eventos', multiplier: 1, decimals: 0 },
+    { slider: 'merma-maint-dur',  display: 'merma-maint-dur-val',  suffix: ' horas', multiplier: 1, decimals: 0 },
+    { slider: 'merma-dmg-prob',   display: 'merma-dmg-prob-val',   suffix: '%', multiplier: 1, decimals: 0 },
+    { slider: 'merma-dmg-impact', display: 'merma-dmg-impact-val', suffix: '%', multiplier: 1, decimals: 0 },
+    { slider: 'merma-dmg-dur',    display: 'merma-dmg-dur-val',    suffix: ' días', multiplier: 1, decimals: 0 },
+    { slider: 'merma-fail-prob',  display: 'merma-fail-prob-val',  suffix: '%', multiplier: 1, decimals: 1 },
+    { slider: 'merma-fail-dur',   display: 'merma-fail-dur-val',   suffix: ' días', multiplier: 1, decimals: 0 },
+    // Térmicos
+    { slider: 'temp-amb-verano',  display: 'temp-amb-verano-val',  suffix: ' °C',   multiplier: 1, decimals: 1 },
+    { slider: 'temp-amb-invierno',display: 'temp-amb-invierno-val',suffix: ' °C',   multiplier: 1, decimals: 1 },
+    { slider: 'hum-verano',       display: 'hum-verano-val',       suffix: '%',     multiplier: 1, decimals: 0 },
+    { slider: 'hum-invierno',     display: 'hum-invierno-val',     suffix: '%',     multiplier: 1, decimals: 0 },
+    { slider: 'viento-vel',       display: 'viento-vel-val',       suffix: ' m/s',  multiplier: 1, decimals: 1 },
+    { slider: 'coef-temp-panel',  display: 'coef-temp-panel-val',  suffix: ' %/°C', multiplier: 1, decimals: 2 },
+    { slider: 'noct-panel',       display: 'noct-panel-val',       suffix: ' °C',   multiplier: 1, decimals: 1 },
+    // Baterías
+    { slider: 'bat-capacidad',    display: 'bat-capacidad-val',    suffix: ' kWh',  multiplier: 1, decimals: 0 },
+    { slider: 'bat-dod',          display: 'bat-dod-val',          suffix: '%',     multiplier: 1, decimals: 0 },
+    { slider: 'bat-eficiencia',   display: 'bat-eficiencia-val',   suffix: '%',     multiplier: 1, decimals: 0 },
+    { slider: 'bat-vida-util',    display: 'bat-vida-util-val',    suffix: ' años', multiplier: 1, decimals: 0 },
+    { slider: 'bat-costo-kwh',    display: 'bat-costo-kwh-val',    prefix: '$',     suffix: ' USD/kWh', multiplier: 1, decimals: 0 },
   ];
   sliders.forEach(({ slider, display, suffix, multiplier, decimals, prefix }) => {
     const el = $(slider), disp = $(display);
@@ -290,6 +313,38 @@ function initSliders() {
     const updateToggle = () => { summerPanel.style.display = toggleVerano.checked ? '' : 'none'; };
     toggleVerano.addEventListener('change', updateToggle);
     updateToggle();
+  }
+
+  // Toggle Climático
+  const toggleThermal = $('toggle-thermal');
+  const thermalPanel = $('thermal-panel');
+  if (toggleThermal && thermalPanel) {
+    const upd = () => { thermalPanel.style.display = toggleThermal.checked ? '' : 'none'; };
+    toggleThermal.addEventListener('change', upd); upd();
+  }
+
+  // Toggle Apagones
+  const toggleOutages = $('toggle-outages');
+  const outagesPanel = $('outages-panel');
+  if (toggleOutages && outagesPanel) {
+    const upd = () => { outagesPanel.style.display = toggleOutages.checked ? '' : 'none'; };
+    toggleOutages.addEventListener('change', upd); upd();
+  }
+
+  // Toggle Mermas
+  const toggleMermas = $('toggle-mermas');
+  const mermasPanel = $('mermas-panel');
+  if (toggleMermas && mermasPanel) {
+    const upd = () => { mermasPanel.style.display = toggleMermas.checked ? '' : 'none'; };
+    toggleMermas.addEventListener('change', upd); upd();
+  }
+
+  // Toggle Baterías
+  const toggleBaterias = $('toggle-baterias');
+  const bateriasPanel = $('baterias-panel');
+  if (toggleBaterias && bateriasPanel) {
+    const upd = () => { bateriasPanel.style.display = toggleBaterias.checked ? '' : 'none'; };
+    toggleBaterias.addEventListener('change', upd); upd();
   }
 }
 
@@ -486,8 +541,13 @@ async function runDemand() {
       state.demandData = data;
       renderDemandCharts(data);
       renderDemandStats(data.stats);
-      $('demand-results').classList.remove('hidden');
-      $('demand-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const demRes = $('demand-results');
+      demRes.classList.remove('hidden');
+      // Activar animaciones fade-in dentro del contenedor de resultados
+      setTimeout(() => {
+        demRes.querySelectorAll('.fade-in').forEach(el => el.classList.add('visible'));
+      }, 50);
+      demRes.scrollIntoView({ behavior: 'smooth', block: 'start' });
       showAlert('demand-alert', 'success', `Perfil generado localmente — ${data.stats.plant_name} · ${n_shifts} turno(s) · Pmax ${Pmax} kW`);
     } catch (e) {
       showAlert('demand-alert', 'error', `Error: ${e.message}`);
@@ -609,9 +669,59 @@ function renderDemandStats(stats) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CLIENT-SIDE: MOTOR SOLAR FOTOVOLTAICO (JENSEN)
+// CLIENT-SIDE: MOTOR SOLAR FOTOVOLTAICO (JENSEN) Y ESTOCÁSTICA
 // ─────────────────────────────────────────────────────────────────────────────
-function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_nominal_w, rainDays = 0, rainLossPct = 0.40, soilingLossPct = 0.05) {
+function generateOutageMask(freq, durHours) {
+  const mask = new Array(35040).fill(false);
+  if (freq <= 0) return mask;
+  const durIntervals = Math.max(1, Math.round(durHours * 4));
+  
+  for (let i = 0; i < freq; i++) {
+    // Escoger un inicio aleatorio que no se desborde del año
+    const startIdx = Math.floor(Math.random() * (35040 - durIntervals));
+    for (let j = 0; j < durIntervals; j++) {
+      mask[startIdx + j] = true;
+    }
+  }
+  return mask;
+}
+
+function generateMermasMask(maintFreq, maintDur, dmgProb, dmgImpact, dmgDurDays, failProb, failDurDays) {
+  const mask = new Array(35040).fill(1.0); // 1.0 = 100% capacidad
+
+  // Mantenimiento
+  if (maintFreq > 0) {
+    const maintIntervals = Math.max(1, Math.round(maintDur * 4));
+    for (let i = 0; i < maintFreq; i++) {
+      const startIdx = Math.floor(Math.random() * (35040 - maintIntervals));
+      // Durante mantenimiento se asume que el sistema está apagado (factor 0)
+      for (let j = 0; j < maintIntervals; j++) { mask[startIdx + j] = 0.0; }
+    }
+  }
+
+  // Daño parcial estocástico
+  if (Math.random() < (dmgProb / 100.0)) {
+    const dmgIntervals = dmgDurDays * 96;
+    const startIdx = Math.floor(Math.random() * (35040 - dmgIntervals));
+    const factor = Math.max(0, 1.0 - (dmgImpact / 100.0));
+    for (let j = 0; j < dmgIntervals; j++) {
+      mask[startIdx + j] *= factor;
+    }
+  }
+
+  // Falla total crítica
+  if (Math.random() < (failProb / 100.0)) {
+    const failIntervals = failDurDays * 96;
+    const startIdx = Math.floor(Math.random() * (35040 - failIntervals));
+    for (let j = 0; j < failIntervals; j++) {
+      mask[startIdx + j] = 0.0;
+    }
+  }
+
+  return mask;
+}
+
+function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_nominal_w, rainDays = 0, rainLossPct = 0.40, soilingLossPct = 0.05, outages = null, outageInverter = 'grid-tied', mermas = null, thermalParams = null) {
   // Build a Set of day-of-year indices that are rainy (distributed in Jun-Sep: days 152-273)
   const rainyDaySet = new Set();
   if (rainDays > 0) {
@@ -671,7 +781,32 @@ function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_
         dayOfYear0 += (day - 1);
         const rainFactor = rainyDaySet.has(dayOfYear0) ? (1.0 - rainLossPct) : 1.0;
         // Aplicar eficiencia del módulo, pérdidas del sistema de 15% (PR = 0.85), factor de lluvias, y pérdidas por polvo acumulado (soiling)
-        const P_kw = (eta * area_m2 * Gtot * n_panels * 0.85 * rainFactor * (1.0 - soilingLossPct)) / 1000.0;
+        let P_kw = (eta * area_m2 * Gtot * n_panels * 0.85 * rainFactor * (1.0 - soilingLossPct)) / 1000.0;
+
+        // Pérdidas térmicas (modelo NOCT con temperatura y humedad estacionales)
+        let thermalFactor = 1.0;
+        if (thermalParams && Gtot > 0) {
+          const isVerano = (month_idx >= 4 && month_idx <= 9); // Mayo(4) a Octubre(9)
+          const T_amb  = isVerano ? thermalParams.temp_verano  : thermalParams.temp_invierno;
+          const RH     = isVerano ? thermalParams.hum_verano   : thermalParams.hum_invierno;
+          const V_wind = thermalParams.viento;
+          const NOCT   = thermalParams.noct;
+          const gamma  = thermalParams.gamma; // negativo, ej -0.35
+          // Temperatura de celda corregida por humedad y viento
+          const T_cell = T_amb + (Gtot / 800.0) * (NOCT - 20.0) * (1.0 - 0.003 * RH) * Math.max(0.1, 1.0 - 0.1 * V_wind);
+          thermalFactor = Math.max(0.5, 1.0 + (gamma / 100.0) * (T_cell - 25.0));
+          P_kw *= thermalFactor;
+        }
+
+        if (mermas && mermas.length > idx) {
+          P_kw *= mermas[idx];
+        }
+
+        if (outages && outages[idx]) {
+          if (outageInverter === 'grid-tied') {
+            P_kw = 0.0;
+          }
+        }
 
         Gtot_arr[idx] = Gtot;
         Gb_h_arr[idx] = horiz.Gb_h;
@@ -778,17 +913,21 @@ function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_
     lat: lat,
     lon: lon,
     alt: alt,
+    rain_days: rainDays,
+    rain_loss: rainLossPct,
+    soiling_loss: soilingLossPct,
   };
 
   return {
     Gtot_arr: Array.from(Gtot_arr),
     P_kw_arr: Array.from(P_kw_arr),
+    outages,
     hours: Array.from({length: N}, (_, i) => i * 0.25),
     monthly_gtot_avg,
     monthly_gtot_max,
     monthly_gen_kWh,
-    daily_gtot_summer: Array.from(daily_gtot_summer),
     daily_p_summer: Array.from(daily_p_summer),
+    mermas,
     stats
   };
 }
@@ -818,11 +957,42 @@ async function runSolar() {
   
   setTimeout(() => {
     try {
+      const useOutages = $('toggle-outages')?.checked;
+      const outagesMask = useOutages ? generateOutageMask(
+        parseFloat($('outage-freq').value),
+        parseFloat($('outage-dur').value)
+      ) : null;
+      const outageInverter = $('outage-inverter')?.value ?? 'grid-tied';
+
+      const useMermas = $('toggle-mermas')?.checked;
+      const mermasMask = useMermas ? generateMermasMask(
+        parseFloat($('merma-maint-freq').value),
+        parseFloat($('merma-maint-dur').value),
+        parseFloat($('merma-dmg-prob').value),
+        parseFloat($('merma-dmg-impact').value),
+        parseFloat($('merma-dmg-dur').value),
+        parseFloat($('merma-fail-prob').value),
+        parseFloat($('merma-fail-dur').value)
+      ) : null;
+
+      // Parámetros térmicos
+      const useThermal = $('toggle-thermal')?.checked;
+      const thermalParams = useThermal ? {
+        temp_verano:  parseFloat($('temp-amb-verano').value),
+        temp_invierno:parseFloat($('temp-amb-invierno').value),
+        hum_verano:   parseFloat($('hum-verano').value),
+        hum_invierno: parseFloat($('hum-invierno').value),
+        viento:       parseFloat($('viento-vel').value),
+        gamma:        parseFloat($('coef-temp-panel').value),
+        noct:         parseFloat($('noct-panel').value)
+      } : null;
+
       const data = runSolarEngine(
         payload.lat, payload.lon, payload.alt,
         payload.eta, payload.area_m2, payload.n_panels,
         payload.tilt, payload.azimuth, payload.p_nominal_w,
-        payload.rain_days, payload.rain_loss, payload.soiling_loss
+        payload.rain_days, payload.rain_loss, payload.soiling_loss,
+        outagesMask, outageInverter, mermasMask, thermalParams
       );
 
       // Calcular balance si hay demanda guardada
@@ -832,6 +1002,7 @@ async function runSolar() {
         const gen_arr = data.P_kw_arr;
         
         let exceso_sum = 0, deficit_sum = 0, e_dem = 0, e_gen = 0;
+        let ens_sum = 0; // Energía No Suministrada por apagones
         const days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
         
         const monthly_balance = [];
@@ -846,11 +1017,18 @@ async function runSolar() {
             const dem = dem_arr[idx_m + i];
             
             m_eg += gen;
-            m_ed += dem;
             
-            const diff = gen - dem;
-            if (diff > 0) exceso_sum += diff;
-            else deficit_sum += Math.abs(diff);
+            if (data.outages && data.outages[idx_m + i]) {
+              const ens = Math.max(0, dem - gen);
+              ens_sum += ens;
+              // Durante apagón no se inyecta exceso a red ni se compra de CFE
+              // El déficit a CFE en ese instante es 0, y el exceso a CFE es 0.
+            } else {
+              m_ed += dem;
+              const diff = gen - dem;
+              if (diff > 0) exceso_sum += diff;
+              else deficit_sum += Math.abs(diff);
+            }
           }
           const eg_kwh = m_eg * 0.25;
           const ed_kwh = m_ed * 0.25;
@@ -859,7 +1037,7 @@ async function runSolar() {
           monthly_cobertura.push(Number((ed_kwh > 0 ? Math.min(eg_kwh / ed_kwh * 100, 100) : 0).toFixed(2)));
           
           e_gen += m_eg;
-          e_dem += m_ed;
+          e_dem += m_ed; // e_dem here is total demand served (from grid + solar, excluding ENS)
           idx_m += n_pts;
         }
 
@@ -870,17 +1048,97 @@ async function runSolar() {
         balance = {
           energia_demanda_kWh: Number(e_dem.toFixed(2)),
           energia_generada_kWh: Number(e_gen.toFixed(2)),
-          cobertura_pct: Number(cob.toFixed(2)),
           exceso_kWh: Number((exceso_sum * 0.25).toFixed(2)),
           deficit_kWh: Number((deficit_sum * 0.25).toFixed(2)),
+          ens_kWh: Number((ens_sum * 0.25).toFixed(2)),
+          cobertura_pct: Number(cob.toFixed(2)),
           monthly_balance,
           monthly_cobertura
         };
+
+        // ── Simulación de Baterías (BESS) ──────────────────────────────────
+        const useBat = $('toggle-baterias')?.checked;
+        const batCapKwh = parseFloat($('bat-capacidad')?.value ?? 200);
+        const batDod    = parseFloat($('bat-dod')?.value ?? 80) / 100.0;
+        const batEff    = parseFloat($('bat-eficiencia')?.value ?? 95) / 100.0;
+        const bat_usable = batCapKwh * batDod;
+        let soc = bat_usable; // SOC inicial: llena
+        let bat_energy_from_bat = 0; // kWh provistos por bateria
+        let bat_ens_con_bat = 0;     // ENS que sobrevive con batería
+        let bat_max_deficit = 0;     // Peor déficit continuo para sizing
+        let cur_deficit_run = 0;     // Acumulador de déficit en apagón activo
+        const soc_arr = useBat ? new Float32Array(35040) : null;
+
+        if (useBat && data.outages) {
+          for (let i = 0; i < 35040; i++) {
+            const gen = data.P_kw_arr[i];
+            const dem = dem_arr[i] || 0;
+            const in_outage = data.outages[i];
+
+            if (!in_outage) {
+              // En operación normal: cargar batería con excedente solar
+              const exceso = Math.max(0, gen - dem);
+              const carga = exceso * batEff * 0.25; // kWh
+              soc = Math.min(bat_usable, soc + carga);
+              cur_deficit_run = 0;
+            } else {
+              // En apagón: batería descarga para suplir déficit
+              const deficit = Math.max(0, dem - gen) * 0.25; // kWh en este intervalo
+              cur_deficit_run += deficit;
+              bat_max_deficit = Math.max(bat_max_deficit, cur_deficit_run);
+
+              const provisto = Math.min(soc, deficit);
+              soc -= provisto;
+              bat_energy_from_bat += provisto;
+              const restante = deficit - provisto;
+              bat_ens_con_bat += restante;
+            }
+            if (soc_arr) soc_arr[i] = soc;
+          }
+        } else if (!useBat && data.outages) {
+          // Sin batería: calcular sizing mínimo recomendado
+          for (let i = 0; i < 35040; i++) {
+            const gen = data.P_kw_arr[i];
+            const dem = dem_arr[i] || 0;
+            if (data.outages[i]) {
+              cur_deficit_run += Math.max(0, dem - gen) * 0.25;
+              bat_max_deficit = Math.max(bat_max_deficit, cur_deficit_run);
+            } else {
+              cur_deficit_run = 0;
+            }
+          }
+        }
+
+        if (useBat) {
+          balance.bat_energy_kwh = Number(bat_energy_from_bat.toFixed(2));
+          balance.bat_ens_residual_kwh = Number(bat_ens_con_bat.toFixed(2));
+          data.soc_arr = soc_arr;
+        }
+        balance.bat_sizing_min_kwh = Number(bat_max_deficit.toFixed(1));
+        balance.bat_sizing_dod = batDod;
       }
 
       data.balance = balance;
       state.solarData = data;
-      
+
+      // Mostrar estimación de pérdidas térmicas
+      if (useThermal) {
+        const tBox = $('thermal-result-box');
+        const tContent = $('thermal-result-content');
+        if (tBox && tContent) {
+          const totalGen = data.stats.energia_anual_kWh;
+          const genSinTermico = (parseFloat($('eta-panel').value) * parseFloat($('input-area').value) * data.stats.horas_pico_sol_equiv * parseInt($('input-npanels').value) * 0.85 * (1.0 - parseFloat($('soiling-loss-pct')?.value ?? 0.05)));
+          const pctThermal = genSinTermico > 0 ? ((genSinTermico - totalGen) / genSinTermico * 100) : 0;
+          tContent.innerHTML = `T_cel verano estimada (mediodía): <strong>${(thermalParams.temp_verano + (800/800)*(thermalParams.noct-20)*(1-0.003*thermalParams.hum_verano)*Math.max(0.1,1-0.1*thermalParams.viento)).toFixed(1)}°C</strong> &nbsp;|&nbsp; Pérdida térmica estimada: <strong style="color:#ef4444">${Math.max(0, pctThermal).toFixed(1)}%</strong>`;
+          tBox.style.display = '';
+        }
+      }
+
+      // Mostrar calculadora de sizing de baterías
+      if (balance && balance.bat_sizing_min_kwh !== undefined) {
+        renderBatterySizing(balance);
+      }
+
       renderSolarCharts(data);
       renderSolarKPIs(data.stats, data.balance);
       renderSolarStats(data.stats, data.balance);
@@ -888,8 +1146,13 @@ async function runSolar() {
       // Análisis económico (CFE GDMTH + ROI/VPN/TIR + gráfica inversión)
       if (typeof runEconomics === 'function') runEconomics();
 
-      $('solar-results').classList.remove('hidden');
-      $('solar-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const solRes = $('solar-results');
+      solRes.classList.remove('hidden');
+      // Activar animaciones fade-in dentro del contenedor de resultados
+      setTimeout(() => {
+        solRes.querySelectorAll('.fade-in').forEach(el => el.classList.add('visible'));
+      }, 50);
+      solRes.scrollIntoView({ behavior: 'smooth', block: 'start' });
       showAlert('solar-alert', 'success', 'Cálculo completado — Motor Jensen · Análisis CFE GDMTH · ROI calculado.');
     } catch (e) {
       showAlert('solar-alert', 'error', `Error en el cálculo: ${e.message}`);
@@ -898,6 +1161,50 @@ async function runSolar() {
       hideLoader();
     }
   }, 50);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALCULADORA DE SIZING DE BATERÍAS
+// ─────────────────────────────────────────────────────────────────────────────
+function renderBatterySizing(balance) {
+  const box = $('bat-sizing-box');
+  const content = $('bat-sizing-content');
+  if (!box || !content) return;
+
+  const minKwh = balance.bat_sizing_min_kwh ?? 0;
+  const usd_mxn = parseFloat($('usd-mxn')?.value ?? 17.50);
+  const cost_usd_kwh = parseFloat($('bat-costo-kwh')?.value ?? 350);
+  const dod = parseFloat($('bat-dod')?.value ?? 80) / 100;
+  // Capacidad nominal (kWh) = usable / DoD
+  const cap_nominal = dod > 0 ? minKwh / dod : minKwh;
+  const costo_usd = cap_nominal * cost_usd_kwh;
+  const costo_mxn = costo_usd * usd_mxn;
+
+  const useBat = $('toggle-baterias')?.checked;
+  const ens_residual = balance.bat_ens_residual_kwh;
+  const bat_provided  = balance.bat_energy_kwh;
+
+  const fmt = (n, d=0) => n == null ? '—' : Number(n).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  const cards = [
+    { label: 'Capacidad Útil Mínima', val: `${fmt(minKwh, 1)} kWh`, color: '#10b981', desc: 'Para mitigar el peor apagón simulado' },
+    { label: 'Capacidad Nominal Recomendada', val: `${fmt(cap_nominal, 0)} kWh`, color: '#10b981', desc: `Considerando DoD = ${(dod*100).toFixed(0)}%` },
+    { label: 'Costo Estimado del Banco', val: `$${fmt(costo_mxn, 0)} MXN`, color: '#fbbf24', desc: `≈ $${fmt(costo_usd, 0)} USD` },
+  ];
+
+  if (useBat && bat_provided != null) {
+    cards.push({ label: 'Energía Provista por Batería', val: `${fmt(bat_provided, 1)} kWh/año`, color: '#3b82f6', desc: 'Durante apagones' });
+    cards.push({ label: 'ENS Residual (con Batería)', val: `${fmt(ens_residual, 1)} kWh/año`, color: ens_residual > 0 ? '#ef4444' : '#10b981', desc: ens_residual > 0 ? 'Batería insuficiente' : '✅ Sin déficit' });
+  }
+
+  content.innerHTML = cards.map(c => `
+    <div style="background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.15);border-radius:10px;padding:1rem;text-align:center;">
+      <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem;">${c.label}</div>
+      <div style="font-size:1.05rem;font-weight:700;color:${c.color};margin-bottom:.3rem;">${c.val}</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);">${c.desc}</div>
+    </div>`).join('');
+
+  box.style.display = '';
 }
 
 function renderSolarKPIs(stats, balance) {
@@ -1275,13 +1582,16 @@ function downloadExcel() {
         ['Cantidad Total de Módulos (N)', s.n_paneles, 'paneles'],
         ['Potencia Pico Total Instalada', s.p_nominal_total_kW, 'kWp'],
         ['Inclinación de los Módulos (Tilt)', s.tilt, '° (Respecto a horizontal)'],
-        ['Orientación Azimutal de los Módulos', s.azimuth, '° (Norte = 0°, Sur = 180°)']
+        ['Orientación Azimutal de los Módulos', s.azimuth, '° (Norte = 0°, Sur = 180°)'],
+        ['Días de Lluvia Activa Anuales (Pérdidas)', s.rain_days ?? 0, 'días/año'],
+        ['Pérdida de Eficiencia por Lluvia', (s.rain_loss ?? 0.40) * 100, '% de caída temporal'],
+        ['Pérdida de Eficiencia por Suciedad (Soiling)', (s.soiling_loss ?? 0.05) * 100, '% anual']
       ];
       
       pvParams.forEach((p, idx) => {
         const isEven = idx % 2 === 0;
         const fmts = [null, typeof p[1] === 'number' ? '0.00' : null, null];
-        if (p[0].includes('Cantidad')) fmts[1] = '#,##0';
+        if (p[0].includes('Cantidad') || p[0].includes('Días')) fmts[1] = '#,##0';
         addDataRow(ws1, p, isEven, ['left', 'right', 'left'], fmts);
       });
       
@@ -1314,6 +1624,108 @@ function downloadExcel() {
           const fmts = [null, typeof p[1] === 'number' ? '0.00' : null, null];
           addDataRow(ws1, p, isEven, ['left', 'right', 'left'], fmts);
         });
+
+        ws1.addRow([]); // Espacio
+      }
+
+      if (state.economicData) {
+        const ec = state.economicData.params;
+
+        // Categoría: Parámetros Económicos y Tarifas CFE
+        const c3 = ws1.addRow([]);
+        c3.height = 20;
+        styleCategoryHeader(c3, 1, 3, ' ── PARÁMETROS ECONÓMICOS Y TARIFARIOS');
+        
+        const h3 = ws1.addRow([]);
+        h3.height = 20;
+        styleTableHeader(h3, ['PARÁMETRO', 'VALOR DE ENTRADA', 'UNIDAD']);
+
+        const econParams = [
+          ['CAPEX (Inversión Inicial Total)', ec.capex, 'MXN'],
+          ['OPEX Anual (% del CAPEX)', ec.opex_pct * 100, '%/año'],
+          ['Vida Útil del Proyecto', ec.vida_util, 'años'],
+          ['Tasa de Descuento (WACC)', ec.wacc * 100, '% nominal'],
+          ['Tasa de Inflación Tarifaria', ec.inflacion * 100, '% anual'],
+          ['Tipo de Cambio Utilizado', ec.usd_mxn, 'MXN/USD'],
+          ['CFE Cargo Fijo Mensual', ec.cargo_fijo_mensual, 'MXN/mes'],
+          ['CFE Demanda de Punta', ec.cargo_demanda_punta, 'MXN/kW-mes'],
+          ['CFE Cargo por Respaldo', ec.cargo_respaldo, 'MXN/kW-mes'],
+          ['CFE Factor de Respaldo Contratado', ec.factor_respaldo * 100, '% de la demanda contratada'],
+          ['CFE Precio Base Estándar', ec.precio_base, 'MXN/kWh'],
+          ['CFE Precio Intermedio Estándar', ec.precio_intermedio, 'MXN/kWh'],
+          ['CFE Precio Punta Estándar', ec.precio_punta, 'MXN/kWh'],
+          ['CFE Precio Base Verano', ec.precio_base_v, 'MXN/kWh'],
+          ['CFE Precio Intermedio Verano', ec.precio_intermedio_v, 'MXN/kWh'],
+          ['CFE Precio Punta Verano', ec.precio_punta_v, 'MXN/kWh'],
+          ['Aplicar Tarifas Estacionales de Verano', ec.use_summer_tariff ? 'Sí' : 'No', '—'],
+          ['Costo Energía No Suministrada (ENS)', ec.outage_cost_ens, 'MXN/kWh'],
+          ['Costo Fijo por Apagón', ec.outage_cost_fix, 'MXN/evento'],
+          ['Costo por Mantenimiento', ec.merma_maint_cost, 'MXN/evento'],
+          ['Costo de Reemplazo (Falla Total)', ec.merma_fail_cost, 'MXN']
+        ];
+
+        econParams.forEach((p, idx) => {
+          const isEven = idx % 2 === 0;
+          const fmts = [null, typeof p[1] === 'number' ? '0.00' : null, null];
+          if (p[0].includes('CAPEX')) fmts[1] = '$#,##0';
+          addDataRow(ws1, p, isEven, ['left', 'right', 'left'], fmts);
+        });
+
+        // ── Baterías (BESS) ────────────────────────────────────────────────────────
+        const useBatExcel = $('toggle-baterias')?.checked;
+        if (useBatExcel) {
+          ws1.addRow([]);
+          const cBat = ws1.addRow([]);
+          cBat.height = 20;
+          styleCategoryHeader(cBat, 1, 3, ' ── SISTEMA DE ALMACENAMIENTO DE ENERGÍA (BESS)');
+          const hBat = ws1.addRow([]);
+          hBat.height = 20;
+          styleTableHeader(hBat, ['PARÁMETRO', 'VALOR DE ENTRADA', 'UNIDAD']);
+          const batKwh = parseFloat($('bat-capacidad').value);
+          const batDod = parseFloat($('bat-dod').value);
+          const batEff = parseFloat($('bat-eficiencia').value);
+          const batVida = parseInt($('bat-vida-util').value);
+          const batCostUSD = parseFloat($('bat-costo-kwh').value);
+          const batParams = [
+            ['Capacidad Total Instalada', batKwh, 'kWh'],
+            ['Profundidad de Descarga (DoD)', batDod, '%'],
+            ['Eficiencia Round-Trip', batEff, '%'],
+            ['Vida Útil del Banco', batVida, 'años'],
+            ['Costo del Banco', batCostUSD, 'USD/kWh'],
+            ['CAPEX Baterías (MXN)', batKwh * batCostUSD * (ec.usd_mxn || 17.5), 'MXN'],
+          ];
+          batParams.forEach((p, idx) => {
+            const isEven = idx % 2 === 0;
+            const fmts = [null, '#,##0.00', null];
+            if (p[2] === 'MXN') fmts[1] = '$#,##0';
+            addDataRow(ws1, p, isEven, ['left', 'right', 'left'], fmts);
+          });
+        }
+
+        // ── Parámetros Clímatico-Térmicos ───────────────────────────────────────────
+        const useThermalExcel = $('toggle-thermal')?.checked;
+        if (useThermalExcel) {
+          ws1.addRow([]);
+          const cThm = ws1.addRow([]);
+          cThm.height = 20;
+          styleCategoryHeader(cThm, 1, 3, ' ── INGENIERÍA CLIMÁTICA Y PÉRDIDAS TÉRMICAS');
+          const hThm = ws1.addRow([]);
+          hThm.height = 20;
+          styleTableHeader(hThm, ['PARÁMETRO', 'VALOR DE ENTRADA', 'UNIDAD']);
+          const thermParams = [
+            ['Temperatura Ambiente Verano (May–Oct)', parseFloat($('temp-amb-verano').value), '°C'],
+            ['Temperatura Ambiente Invierno (Nov–Abr)', parseFloat($('temp-amb-invierno').value), '°C'],
+            ['Humedad Relativa Verano', parseFloat($('hum-verano').value), '%'],
+            ['Humedad Relativa Invierno', parseFloat($('hum-invierno').value), '%'],
+            ['Velocidad del Viento', parseFloat($('viento-vel').value), 'm/s'],
+            ['Coeficiente de Temperatura del Panel (γ)', parseFloat($('coef-temp-panel').value), '%/°C'],
+            ['Temperatura Nominal de Operación (NOCT)', parseFloat($('noct-panel').value), '°C'],
+          ];
+          thermParams.forEach((p, idx) => {
+            const isEven = idx % 2 === 0;
+            addDataRow(ws1, p, isEven, ['left', 'right', 'left'], [null, '0.00', null]);
+          });
+        }
       }
       
       autofitColumns(ws1);
@@ -1374,6 +1786,96 @@ function downloadExcel() {
         kpisBalance.forEach((p, idx) => {
           const isEven = idx % 2 === 0;
           const fmt = p[0].includes('Cobertura') ? '0.0%' : '#,##0.0';
+          addDataRow(ws2, p, isEven, ['left', 'right', 'center', 'left'], [null, fmt, null, null]);
+        });
+        
+        if (state.economicData && state.economicData.riesgos) {
+          const r = state.economicData.riesgos;
+          ws2.addRow([]); // Espacio
+          
+          const c2_r = ws2.addRow([]);
+          c2_r.height = 20;
+          styleCategoryHeader(c2_r, 1, 4, ' ── IMPACTO DE RIESGOS Y RESILIENCIA');
+          
+          const h2_r = ws2.addRow([]);
+          h2_r.height = 20;
+          styleTableHeader(h2_r, ['MÉTRICA / INDICADOR', 'VALOR', 'UNIDAD', 'DESCRIPCIÓN OPERATIVA']);
+          
+          const kpisRiesgos = [
+            ['Energía No Suministrada (ENS)', b.ens_kWh, 'kWh/año', 'Demanda industrial perdida durante apagones de red.'],
+            ['Pérdida Económica por ENS', r.costo_ens, 'MXN/año', 'Costo asociado a la energía que la planta no pudo consumir.'],
+            ['Pérdida Económica Fija por Apagones', r.costo_eventos_apagon, 'MXN/año', 'Costo operativo fijo incurrido en cada evento de apagón.'],
+            ['Costo Esperado por Mermas y Mantenimiento', r.costo_eventos_mermas, 'MXN/año', 'Costos anualizados por mantenimientos programados y fallas.'],
+            ['Total Pérdidas por Riesgos', r.perdidas_riesgos, 'MXN/año', 'Suma total de pérdidas económicas descontadas del ahorro real.']
+          ];
+          
+          kpisRiesgos.forEach((p, idx) => {
+            const isEven = idx % 2 === 0;
+            const fmt = p[0].includes('Energía') ? '#,##0.0' : '$#,##0';
+            addDataRow(ws2, p, isEven, ['left', 'right', 'center', 'left'], [null, fmt, null, null]);
+          });
+
+          // Baterías: impacto en ENS
+          const useBatExcel2 = $('toggle-baterias')?.checked;
+          if (useBatExcel2 && b.bat_energy_kwh != null) {
+            ws2.addRow([]);
+            const c2_bat = ws2.addRow([]);
+            c2_bat.height = 20;
+            styleCategoryHeader(c2_bat, 1, 4, ' ── DESEMPEÑO DEL SISTEMA DE BATERÍAS (BESS)');
+            const h2_bat = ws2.addRow([]);
+            h2_bat.height = 20;
+            styleTableHeader(h2_bat, ['MÉTRICA / INDICADOR', 'VALOR', 'UNIDAD', 'DESCRIPCIÓN OPERATIVA']);
+            const kpisBat = [
+              ['Energía Provista por Baterías (Respaldo)', b.bat_energy_kwh, 'kWh/año', 'Energía inyectada por el BESS durante los apagones simulados.'],
+              ['ENS Residual con Baterías', b.bat_ens_residual_kwh, 'kWh/año', 'Déficit que permanece después de agotar la capacidad del banco.'],
+              ['Capacidad Mínima Recomendada', b.bat_sizing_min_kwh / (b.bat_sizing_dod || 0.8), 'kWh', 'Tamaño nominal sugerido para lograr 0 kWh de ENS.'],
+            ];
+            kpisBat.forEach((p, idx) => {
+              const isEven = idx % 2 === 0;
+              addDataRow(ws2, p, isEven, ['left', 'right', 'center', 'left'], [null, '#,##0.0', null, null]);
+            });
+          }
+        }
+      }
+
+      if (state.economicData) {
+        const { factura, roi } = state.economicData;
+
+        ws2.addRow([]); // Espacio
+        
+        const c2_3 = ws2.addRow([]);
+        c2_3.height = 20;
+        styleCategoryHeader(c2_3, 1, 4, ' ── ANÁLISIS ECONÓMICO Y DE RETORNO DE INVERSIÓN (ROI)');
+        
+        const h2_3 = ws2.addRow([]);
+        h2_3.height = 20;
+        styleTableHeader(h2_3, ['MÉTRICA / INDICADOR', 'VALOR', 'UNIDAD', 'DESCRIPCIÓN OPERATIVA']);
+
+        const kpisEcon = [
+          ['Factura CFE Anual Sin Solar', factura.factura_sin, 'MXN/año', 'Costo total estimado del consumo eléctrico sin la planta solar.'],
+          ['Factura CFE Anual Con Solar', factura.factura_con, 'MXN/año', 'Costo residual del consumo de red más el cargo por respaldo y cargo fijo.'],
+          ['Ahorro Económico Neto Anual', factura.ahorro, 'MXN/año', 'Diferencia neta a favor generada por la inyección de energía solar.'],
+          ['CAPEX Total del Proyecto (Solar + BESS)', roi.capex, 'MXN', 'Inversión inicial total incluyendo baterías si están activas.'],
+          ['CAPEX Baterías (BESS)', roi.bat_capex_mxn || 0, 'MXN', 'Costo del banco de baterías incluido en el CAPEX total.'],
+          ['Valor Presente Neto (VPN)', roi.vpn, 'MXN', 'Rentabilidad neta descontada del proyecto a la tasa de descuento WACC.'],
+          ['Tasa Interna de Retorno (TIR)', roi.tir, '%', 'Tasa efectiva anualizada de retorno financiero del capital invertido.'],
+          ['Retorno de Inversión Simple', roi.payback_simple ?? 'N/A', 'años', 'Tiempo requerido para recuperar el CAPEX sin descontar flujos.'],
+          ['Retorno de Inversión Descontado', roi.payback_desc ?? 'N/A', 'años', 'Tiempo de recuperación real considerando el valor del dinero en el tiempo.'],
+          ['Costo Nivelado de la Energía (LCOE)', roi.lcoe, 'MXN/kWh', 'Costo unitario promedio de cada kWh generado a lo largo de la vida útil.']
+        ];
+
+        kpisEcon.forEach((p, idx) => {
+          const isEven = idx % 2 === 0;
+          let fmt = null;
+          if (p[0].includes('Factura') || p[0].includes('Ahorro') || p[0].includes('Neto (VPN)')) {
+            fmt = '$#,##0';
+          } else if (p[0].includes('Tasa')) {
+            fmt = '0.0%';
+          } else if (p[0].includes('Costo Nivelado')) {
+            fmt = '$0.000';
+          } else if (p[0].includes('Retorno') && typeof p[1] === 'number') {
+            fmt = '#,##0';
+          }
           addDataRow(ws2, p, isEven, ['left', 'right', 'center', 'left'], [null, fmt, null, null]);
         });
       }
@@ -1470,13 +1972,19 @@ function downloadExcel() {
 
       const headers5 = ['PUNTO', 'FECHA Y HORA', 'DÍA DEL AÑO', 'IRRAD. POA [W/m²]', 'POTENCIA PV [kW]'];
       if (state.demandData) headers5.push('DEMANDA PLANTA [kW]', 'BALANCE NETO [kW]');
+      if (state.solarData.outages || state.solarData.mermas) {
+        headers5.push('ESTADO RED', 'FACTOR MERMAS');
+      }
+      if (state.solarData.soc_arr) {
+        headers5.push('SOC BATERÍA [kWh]');
+      }
 
       const h5 = ws5.addRow([]);
       h5.height = 20;
       styleTableHeader(h5, headers5);
 
-      const aligns5 = ['center', 'center', 'center', 'right', 'right', 'right', 'right'];
-      const fmts5   = [null, null, null, '#,##0.0', '#,##0.00', '#,##0.00', '#,##0.00'];
+      const aligns5 = ['center', 'center', 'center', 'right', 'right', 'right', 'right', 'center', 'right', 'right'];
+      const fmts5   = [null, null, null, '#,##0.0', '#,##0.00', '#,##0.00', '#,##0.00', null, '0.0%', '#,##0.00'];
 
       const days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
       let dataIdx = 0;
@@ -1502,6 +2010,17 @@ function downloadExcel() {
             if (state.demandData) {
               const p_dem = state.demandData.demand_kW[dataIdx];
               rowVals5.push(p_dem, p_pv - p_dem);
+            }
+
+            if (state.solarData.outages || state.solarData.mermas) {
+              const outState = (state.solarData.outages && state.solarData.outages[dataIdx]) ? 'APAGÓN' : 'ACTIVA';
+              const mermaF = (state.solarData.mermas && state.solarData.mermas[dataIdx] !== undefined) ? state.solarData.mermas[dataIdx] : 1.0;
+              rowVals5.push(outState, mermaF);
+            }
+
+            if (state.solarData.soc_arr) {
+              const socVal = state.solarData.soc_arr[dataIdx];
+              rowVals5.push(socVal); // kWh
             }
 
             addDataRow(ws5, rowVals5, dataIdx % 2 === 0, aligns5, fmts5);
@@ -1540,8 +2059,17 @@ function downloadExcel() {
 function initScrollAnimations() {
   const obs = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
-  }, { threshold: 0.1 });
-  document.querySelectorAll('.fade-in').forEach(el => obs.observe(el));
+  }, { threshold: 0.05, rootMargin: '0px 0px -30px 0px' });
+  document.querySelectorAll('.fade-in').forEach(el => {
+    // Si ya está en el viewport al cargar (sin scroll), marcar visible inmediatamente
+    const rect = el.getBoundingClientRect();
+    const inViewport = rect.top < window.innerHeight && rect.bottom > 0;
+    if (inViewport && !el.closest('#demand-results') && !el.closest('#solar-results')) {
+      el.classList.add('visible');
+    } else {
+      obs.observe(el);
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1568,5 +2096,15 @@ document.addEventListener('DOMContentLoaded', () => {
   ['demand-results', 'solar-results'].forEach(id => {
     const el = $(id);
     if (el) el.classList.add('hidden');
+  });
+
+  // Toggles de paneles de riesgo
+  $('toggle-outages')?.addEventListener('change', (e) => {
+    const pnl = $('outages-panel');
+    if (pnl) pnl.style.display = e.target.checked ? 'block' : 'none';
+  });
+  $('toggle-mermas')?.addEventListener('change', (e) => {
+    const pnl = $('mermas-panel');
+    if (pnl) pnl.style.display = e.target.checked ? 'block' : 'none';
   });
 });

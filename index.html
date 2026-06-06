@@ -12,8 +12,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <meta name="description" content="Motor solar fotovoltaico v2.1 basado en el modelo de Jensen. Calcula irradiancia POA, ángulos óptimos de instalación, generación eléctrica y balance de demanda industrial." />
 
-  <!-- Estilos base del template -->
-  <link rel="stylesheet" href="assets/css/main.css" />
   <!-- Estilos premium solar -->
   <link rel="stylesheet" href="assets/css/solar.css" />
 
@@ -27,6 +25,10 @@
     /* Overrides para integrar con Tessellate */
     body { background: #0a0e1a !important; color: #f1f5f9 !important; }
     .hidden { display: none !important; }
+
+    /* Compensar navbar fija (≈70px) en anclas */
+    html { scroll-padding-top: 80px; }
+
     .section-divider-line {
       height: 1px;
       background: linear-gradient(90deg, transparent, rgba(249,115,22,0.4), transparent);
@@ -299,6 +301,19 @@
       resolución quinceminutal. Geolocalización automática, ángulos óptimos de
       instalación calculados en tiempo real, y exportación completa a Excel.
     </p>
+    <div class="hero-actions">
+      <a href="#demanda" class="btn btn-primary">
+        <span>🏭</span> Comenzar Simulación
+      </a>
+      <a href="#guia" class="btn btn-secondary">
+        <span>📋</span> Ver Guía de Datos
+      </a>
+    </div>
+  </div>
+  <!-- Indicador de scroll -->
+  <div class="hero-scroll-hint">
+    <div class="scroll-arrow">↓</div>
+    <span>Desplázate para comenzar</span>
   </div>
 </section>
 
@@ -1014,6 +1029,291 @@
       </button>
     </div>
 
+  </div>
+</section>
+
+<div class="section-divider-line"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SECCIÓN 2.5: RIESGOS Y RESILIENCIA
+════════════════════════════════════════════════════════════════════════════ -->
+<section id="riesgos" class="section">
+  <div class="section-inner">
+    <div class="section-header fade-in">
+      <span class="section-tag tag-red">⚠️ Análisis de Riesgo</span>
+      <h2 class="section-title">Resiliencia y Mermas del Sistema</h2>
+      <p class="section-desc">
+        Configura apagones de red y eventos de contingencia (mantenimiento, daños, fallas) para evaluar el impacto real en tus ahorros y retorno de inversión.
+      </p>
+    </div>
+
+    <div class="card card-lg fade-in" style="margin-bottom: 2rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
+        <h3 style="font-size:1.1rem;color:var(--accent-orange);margin:0;">🔌 Simulador Estocástico de Cortes de Red (Apagones)</h3>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-outages" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="outages-panel" style="display: none;">
+        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 1.5rem;">Simula eventos aleatorios de falla en la red eléctrica a lo largo del año. Configura el comportamiento de tu inversor y el impacto monetario de la Energía No Suministrada (ENS).</p>
+        
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="outage-inverter">Tipo de Inversor</label>
+            <select id="outage-inverter" class="form-input" style="appearance:auto;">
+              <option value="grid-tied">Grid-Tied (Se apaga en apagones)</option>
+              <option value="hybrid">Híbrido / Microred (Backup activo)</option>
+            </select>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Grid-Tied: PV = 0kW. Híbrido: PV sigue generando.</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label" for="outage-freq">Eventos de Corte / Año <span class="label-unit">[0-50]</span></label>
+            <input type="range" class="form-range" id="outage-freq" min="0" max="50" step="1" value="5" />
+            <div class="range-value" id="outage-freq-val">5 eventos</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="outage-dur">Duración Promedio <span class="label-unit">[h]</span></label>
+            <input type="range" class="form-range" id="outage-dur" min="0.25" max="24" step="0.25" value="2" />
+            <div class="range-value" id="outage-dur-val">2.0 horas</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="outage-cost-ens">Costo ENS <span class="label-unit">[MXN/kWh]</span></label>
+            <input type="number" class="form-input" id="outage-cost-ens" min="0" step="0.5" value="8.50" />
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Pérdida por kWh no suministrado o costo diésel.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="outage-cost-fix">Costo Fijo por Evento <span class="label-unit">[MXN]</span></label>
+            <input type="number" class="form-input" id="outage-cost-fix" min="0" step="1000" value="5000" />
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Costo operativo/reinicio por cada apagón.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-lg fade-in">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem;">
+        <h3 style="font-size:1.1rem;color:#ef4444;margin:0;">🚨 Mermas y Contingencias Físicas (Paneles)</h3>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-mermas" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      
+      <div id="mermas-panel" style="display: none;">
+        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 1.5rem;">Simula mermas operativas: mantenimiento planificado, daños parciales estocásticos y fallas totales (vandalismo, inversor caído).</p>
+        
+        <h4 style="font-size:0.9rem; color:var(--text-primary); margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:0.5rem;">🛠️ Mantenimiento Planificado</h4>
+        <div class="form-grid" style="margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label class="form-label" for="merma-maint-freq">Mantenimientos / Año <span class="label-unit">[eventos]</span></label>
+            <input type="range" class="form-range" id="merma-maint-freq" min="0" max="12" step="1" value="2" />
+            <div class="range-value" id="merma-maint-freq-val">2 eventos</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="merma-maint-dur">Duración <span class="label-unit">[h]</span></label>
+            <input type="range" class="form-range" id="merma-maint-dur" min="1" max="48" step="1" value="8" />
+            <div class="range-value" id="merma-maint-dur-val">8 horas</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="merma-maint-cost">Costo Mantenimiento <span class="label-unit">[MXN/evento]</span></label>
+            <input type="number" class="form-input" id="merma-maint-cost" min="0" step="500" value="3500" />
+          </div>
+        </div>
+
+        <h4 style="font-size:0.9rem; color:var(--text-primary); margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:0.5rem;">⚡ Daño Parcial Estocástico</h4>
+        <div class="form-grid" style="margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label class="form-label" for="merma-dmg-prob">Probabilidad de Daño/Año <span class="label-unit">[%]</span></label>
+            <input type="range" class="form-range" id="merma-dmg-prob" min="0" max="50" step="1" value="15" />
+            <div class="range-value" id="merma-dmg-prob-val">15%</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="merma-dmg-impact">Impacto Capacidad <span class="label-unit">[%]</span></label>
+            <input type="range" class="form-range" id="merma-dmg-impact" min="5" max="80" step="5" value="30" />
+            <div class="range-value" id="merma-dmg-impact-val">30%</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="merma-dmg-dur">Duración hasta reparar <span class="label-unit">[días]</span></label>
+            <input type="range" class="form-range" id="merma-dmg-dur" min="1" max="60" step="1" value="14" />
+            <div class="range-value" id="merma-dmg-dur-val">14 días</div>
+          </div>
+        </div>
+
+        <h4 style="font-size:0.9rem; color:var(--text-primary); margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:0.5rem;">🔥 Falla Total o Crítica</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="merma-fail-prob">Probabilidad Falla/Año <span class="label-unit">[%]</span></label>
+            <input type="range" class="form-range" id="merma-fail-prob" min="0" max="20" step="0.5" value="2.0" />
+            <div class="range-value" id="merma-fail-prob-val">2.0%</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="merma-fail-dur">Tiempo Inactividad <span class="label-unit">[días]</span></label>
+            <input type="range" class="form-range" id="merma-fail-dur" min="1" max="90" step="1" value="30" />
+            <div class="range-value" id="merma-fail-dur-val">30 días</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="merma-fail-cost">Costo de Reparación <span class="label-unit">[MXN]</span></label>
+            <input type="number" class="form-input" id="merma-fail-cost" min="0" step="5000" value="85000" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider-line"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SECCIÓN 2.6: INGENIERÍA CLIMÁTICA Y TÉRMICA
+════════════════════════════════════════════════════════════════════════════ -->
+<section id="climatica" class="section">
+  <div class="section-inner">
+    <div class="section-header fade-in">
+      <span class="section-tag tag-blue">🌡️ Modelo Climático</span>
+      <h2 class="section-title">Ingeniería Climática y Pérdidas Térmicas</h2>
+      <p class="section-desc">Configura las condiciones ambientales estacionales para calcular la temperatura real de la celda y las pérdidas de rendimiento por calor.</p>
+    </div>
+
+    <div class="card card-lg fade-in">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+        <h3 style="font-size:1.1rem;color:var(--accent-blue);margin:0;">🌤️ Parámetros Ambientales Estacionales</h3>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-thermal" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="thermal-panel" style="display:none;">
+        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1.5rem;">El modelo NOCT calcula la temperatura real de la celda solar en función de la irradiancia, temperatura ambiente, humedad y enfriamiento por viento. Separamos Verano (May–Oct) e Invierno (Nov–Abr).</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+          <div style="background:rgba(249,115,22,0.05);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:1.25rem;">
+            <div style="font-size:0.8rem;font-weight:700;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;">☀️ Verano (Mayo – Octubre)</div>
+            <div class="form-group">
+              <label class="form-label" for="temp-amb-verano">Temp. Ambiente <span class="label-unit">[°C]</span></label>
+              <input type="range" class="form-range" id="temp-amb-verano" min="15" max="50" step="0.5" value="32" />
+              <div class="range-value" id="temp-amb-verano-val">32.0 °C</div>
+            </div>
+            <div class="form-group" style="margin-top:1rem;">
+              <label class="form-label" for="hum-verano">Humedad Relativa <span class="label-unit">[%]</span></label>
+              <input type="range" class="form-range" id="hum-verano" min="0" max="100" step="1" value="65" />
+              <div class="range-value" id="hum-verano-val">65%</div>
+            </div>
+          </div>
+
+          <div style="background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.15);border-radius:12px;padding:1.25rem;">
+            <div style="font-size:0.8rem;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;">❄️ Invierno (Nov – Abril)</div>
+            <div class="form-group">
+              <label class="form-label" for="temp-amb-invierno">Temp. Ambiente <span class="label-unit">[°C]</span></label>
+              <input type="range" class="form-range" id="temp-amb-invierno" min="0" max="35" step="0.5" value="15" />
+              <div class="range-value" id="temp-amb-invierno-val">15.0 °C</div>
+            </div>
+            <div class="form-group" style="margin-top:1rem;">
+              <label class="form-label" for="hum-invierno">Humedad Relativa <span class="label-unit">[%]</span></label>
+              <input type="range" class="form-range" id="hum-invierno" min="0" max="100" step="1" value="35" />
+              <div class="range-value" id="hum-invierno-val">35%</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="viento-vel">Velocidad del Viento <span class="label-unit">[m/s]</span></label>
+            <input type="range" class="form-range" id="viento-vel" min="0" max="15" step="0.5" value="3" />
+            <div class="range-value" id="viento-vel-val">3.0 m/s</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Mayor viento → más enfriamiento → menos pérdidas.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="coef-temp-panel">Coef. Temperatura (γ) <span class="label-unit">[%/°C]</span></label>
+            <input type="range" class="form-range" id="coef-temp-panel" min="-0.50" max="-0.20" step="0.01" value="-0.35" />
+            <div class="range-value" id="coef-temp-panel-val">-0.35 %/°C</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Mono-Si: -0.35. Perc: -0.30. CdTe: -0.25.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="noct-panel">NOCT del Panel <span class="label-unit">[°C]</span></label>
+            <input type="range" class="form-range" id="noct-panel" min="40" max="55" step="0.5" value="45" />
+            <div class="range-value" id="noct-panel-val">45.0 °C</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Temperatura nominal de operación de la celda (NOCT).</div>
+          </div>
+        </div>
+
+        <div id="thermal-result-box" style="margin-top:1.5rem;padding:1rem 1.25rem;background:rgba(249,115,22,0.05);border:1px solid rgba(249,115,22,0.15);border-radius:10px;display:none;">
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:.4rem;">Estimación de Pérdidas Térmicas</div>
+          <div id="thermal-result-content" style="font-size:0.95rem;color:var(--text-primary);font-weight:600;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider-line"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SECCIÓN 2.7: SISTEMA DE ALMACENAMIENTO (BATERÍAS / BESS)
+════════════════════════════════════════════════════════════════════════════ -->
+<section id="baterias" class="section section-alt">
+  <div class="section-inner">
+    <div class="section-header fade-in">
+      <span class="section-tag tag-green">🔋 Almacenamiento</span>
+      <h2 class="section-title">Sistema de Baterías (BESS)</h2>
+      <p class="section-desc">Configura un banco de baterías de respaldo. La simulación calculará el ciclo de carga/descarga y el impacto financiero en el ROI del proyecto.</p>
+    </div>
+
+    <div class="card card-lg fade-in" style="margin-bottom:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+        <h3 style="font-size:1.1rem;color:#10b981;margin:0;">🔋 Banco de Baterías de Respaldo</h3>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-baterias" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="baterias-panel" style="display:none;">
+        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1.5rem;">Durante un apagón, la batería descarga su energía para suplir la demanda de la planta hasta agotarse (limitado por DoD). En operación normal, el excedente PV carga la batería.</p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="bat-capacidad">Capacidad Total Instalada <span class="label-unit">[kWh]</span></label>
+            <input type="range" class="form-range" id="bat-capacidad" min="10" max="5000" step="10" value="200" />
+            <div class="range-value" id="bat-capacidad-val">200 kWh</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="bat-dod">Profundidad de Descarga (DoD) <span class="label-unit">[%]</span></label>
+            <input type="range" class="form-range" id="bat-dod" min="50" max="100" step="5" value="80" />
+            <div class="range-value" id="bat-dod-val">80%</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">LFP: 80–90%. NMC: 80%. Plomo-ácido: 50%.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="bat-eficiencia">Eficiencia Round-Trip <span class="label-unit">[%]</span></label>
+            <input type="range" class="form-range" id="bat-eficiencia" min="80" max="99" step="1" value="95" />
+            <div class="range-value" id="bat-eficiencia-val">95%</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="bat-vida-util">Vida Útil del Banco <span class="label-unit">[años]</span></label>
+            <input type="range" class="form-range" id="bat-vida-util" min="5" max="20" step="1" value="10" />
+            <div class="range-value" id="bat-vida-util-val">10 años</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Costo de reemplazo integrado en el flujo de caja.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="bat-costo-kwh">Costo del Banco <span class="label-unit">[USD/kWh]</span></label>
+            <input type="range" class="form-range" id="bat-costo-kwh" min="100" max="800" step="10" value="350" />
+            <div class="range-value" id="bat-costo-kwh-val">$350 USD/kWh</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculadora de baterías necesarias -->
+    <div class="card card-lg fade-in" id="bat-sizing-box" style="display:none;">
+      <div style="font-size:0.8rem;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem;">🧮 Calculadora de Reserva Mínima</div>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem;">
+        Basado en los apagones simulados, el sistema estima la capacidad de batería mínima para lograr <strong style="color:#10b981">0 kWh de ENS</strong>.
+      </p>
+      <div id="bat-sizing-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;"></div>
+    </div>
   </div>
 </section>
 
