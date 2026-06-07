@@ -103,32 +103,30 @@ def api_solar():
         lat         = float(np.clip(float(d.get('lat',         25.67)),  -90,  90))
         lon         = float(d.get('lon',         -100.31))
 
-        # Cachear por coordenada — solo descarga si cambia la ubicación
+        # CORRECTO — leer todos los parámetros primero, luego llamar una sola vez:
+        lat = float(np.clip(float(d.get('lat', 25.67)), -90, 90))
+        lon = float(d.get('lon', -100.31))
+        alt = float(d.get('alt', 538))
+        area_m2 = float(d.get('area_m2', 2.0))
+        n_panels = max(1, int(d.get('n_panels', 50)))
+        tilt = float(np.clip(float(d.get('tilt', 25.0)), 0, 90))
+        azimuth = float(d.get('azimuth', 180.0))
+        p_nominal_w = float(d.get('p_nominal_w', 400.0))
+        eta_sys = float(np.clip(float(d.get('eta_sys', 0.75)), 0.50, 1.00))
+        noct = float(np.clip(float(d.get('noct', 45.0)), 35.0, 60.0))
+        chi = float(np.clip(float(d.get('chi', 0.40)), 0.20, 0.60))
+
         cache_key = f"tambiente_{round(lat, 2)}_{round(lon, 2)}"
         if cache_key not in _cache:
             _cache[cache_key] = fetch_tambiente_profile(lat, lon)
 
         result = run_solar_engine(
-            ...,
-            t_amb_profile=_cache[cache_key]
-        )
-
-        alt         = float(d.get('alt',          538))
-        area_m2     = float(d.get('area_m2',        2.0))
-        n_panels    = max(1, int(d.get('n_panels',   50)))
-        tilt        = float(np.clip(float(d.get('tilt', 25.0)), 0, 90))
-        azimuth     = float(d.get('azimuth',       180.0))
-        p_nominal_w = float(d.get('p_nominal_w',   400.0))
-
-        eta_sys  = float(np.clip(float(d.get('eta_sys',  0.75)), 0.50, 1.00))
-        noct     = float(np.clip(float(d.get('noct',    45.0)),  35.0, 60.0))
-        chi     = float(np.clip(float(d.get('chi',     0.40)),  0.20,  0.60))
-
-        result = run_solar_engine(
             lat=lat, lon=lon, alt=alt,
+            eta_ref=0,  # se deduce internamente
             area_m2=area_m2, n_panels=n_panels,
             tilt=tilt, azimuth=azimuth, p_nominal_w=p_nominal_w,
             eta_sys=eta_sys, noct=noct, chi=chi,
+            t_amb_profile=_cache[cache_key]
         )
 
         # ── Balance si hay demanda en caché ──────────────────────────────────
@@ -260,7 +258,7 @@ def api_download_excel():
         ('Latitud',            f"{s['lat']} °"),
         ('Longitud',           f"{s['lon']} °"),
         ('Altitud',            f"{s['alt']} m s.n.m."),
-        ('Eficiencia del panel η', f"{s['eta']*100:.1f} %"),
+        ('Eficiencia del Módulo Fotovoltaico (η)', s.get('eta', s.get('eta_ref', 0)), 'fracción decimal'),
         ('Área del panel',     f"{s['area_m2']} m²"),
         ('Potencia nominal',   f"{s['potencia_nominal_W_panel']} W"),
         ('Número de paneles',  s['n_paneles']),
@@ -340,7 +338,7 @@ def api_download_excel():
     # Calcular balance aquí para KPIs
     if demand:
         dem_arr = np.array(demand['demand_kW'])
-        gen_arr = np.array(P_kw)
+        gen_arr = np.array(solar['P_kw_arr'])
         e_dem   = float(np.sum(dem_arr) * 0.25)
         e_gen   = float(np.sum(gen_arr) * 0.25)
         cob     = min(e_gen / e_dem * 100, 100) if e_dem > 0 else 0

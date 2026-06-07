@@ -230,7 +230,7 @@ function initSliders() {
   const sliders = [
     { slider: 'fc-planta',        display: 'fc-planta-val',        suffix: '%',     multiplier: 100, decimals: 0 },
     { slider: 'fp-potencia',      display: 'fp-potencia-val',      suffix: '',      multiplier: 1,   decimals: 2 },
-    { slider: 'eta-panel',        display: 'eta-panel-val',        suffix: '%',     multiplier: 100, decimals: 0 },
+    { slider: 'chi-panel',        display: 'chi-panel-val',        suffix: ' %/°C', multiplier: 1,   decimals: 2 },
     { slider: 'tilt-angle',       display: 'tilt-val',             suffix: '°',     multiplier: 1,   decimals: 0 },
     { slider: 'weekend-factor',   display: 'weekend-factor-val',   suffix: '%',     multiplier: 100, decimals: 0 },
     { slider: 'summer-boost',     display: 'summer-boost-val',     suffix: '',      multiplier: 1,   decimals: 2, prefix: '×' },
@@ -611,7 +611,7 @@ function renderDemandStats(stats) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CLIENT-SIDE: MOTOR SOLAR FOTOVOLTAICO (JENSEN)
 // ─────────────────────────────────────────────────────────────────────────────
-function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_nominal_w, rainDays = 0, rainLossPct = 0.40, soilingLossPct = 0.05) {
+function runSolarEngine(lat, lon, alt, eta_ref, area_m2, n_panels, tilt, azimuth, p_nominal_w, rainDays = 0, rainLossPct = 0.40, soilingLossPct = 0.05, chi, noct, eta_sys, t_amb=25.0) {
   // Build a Set of day-of-year indices that are rainy (distributed in Jun-Sep: days 152-273)
   const rainyDaySet = new Set();
   if (rainDays > 0) {
@@ -641,6 +641,11 @@ function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_
 
   const days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
+  const chi_per_c  = chi / 100.0;
+  const T_STC      = 25.0;
+  const T_NOCT_AMB = 20.0;
+  const G_NOCT     = 800.0;
+
   let idx = 0;
   for (let month_idx = 0; month_idx < 12; month_idx++) {
     const n_days = days_in_month[month_idx];
@@ -664,14 +669,21 @@ function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_
         // Irradiancia en Plano de Arreglo (POA transposición)
         const Gtot = _poaIrradiance(horiz.Gb_h, horiz.Gd_h, alpha_eff, pos.azimuth, tilt_r, azimuth_r);
 
-        // Generación PV [kW] considerando pérdidas del sistema de 15% (Performance Ratio = 0.85)
-        // Calcular día del año (0-indexed) para aplicar factor de lluvia
-        let dayOfYear0 = 0;
-        for (let mm = 0; mm < month_idx; mm++) dayOfYear0 += days_in_month[mm];
-        dayOfYear0 += (day - 1);
-        const rainFactor = rainyDaySet.has(dayOfYear0) ? (1.0 - rainLossPct) : 1.0;
-        // Aplicar eficiencia del módulo, pérdidas del sistema de 15% (PR = 0.85), factor de lluvias, y pérdidas por polvo acumulado (soiling)
-        const P_kw = (eta * area_m2 * Gtot * n_panels * 0.85 * rainFactor * (1.0 - soilingLossPct)) / 1000.0;
+        // Temperatura de operación (modelo NOCT)
+        const t_op = t_amb + (noct - T_NOCT_AMB) * (Gtot / G_NOCT);
+
+        // Eficiencia corregida por temperatura
+        const eta_T = Math.max(0, eta_ref * (1.0 - chi_per_c * (t_op - T_STC)));
+
+        // Generación [kW]
+        const dayOfYear0 = (() => {
+          let d = 0;
+          for (let mm = 0; mm < month_idx; mm++) d += days_in_month[mm];
+          return d + (day - 1);
+        })();
+        const rainFactor   = rainyDaySet.has(dayOfYear0) ? (1.0 - rainLossPct) : 1.0;
+        const P_kw = (eta_T * eta_sys * area_m2 * Gtot * n_panels
+                      * rainFactor * (1.0 - soilingLossPct)) / 1000.0;
 
         Gtot_arr[idx] = Gtot;
         Gb_h_arr[idx] = horiz.Gb_h;
@@ -771,7 +783,11 @@ function runSolarEngine(lat, lon, alt, eta, area_m2, n_panels, tilt, azimuth, p_
     n_horas_generacion: active_hours,
     n_paneles: n_panels,
     potencia_nominal_W_panel: p_nominal_w,
-    eta: eta,
+    eta_ref          : eta_ref,
+    eta_sys          : eta_sys,
+    noct             : noct,
+    chi_pct_por_c    : chi,
+    t_amb_ref        : t_amb,
     area_m2: area_m2,
     tilt: tilt,
     azimuth: azimuth,
@@ -798,9 +814,11 @@ async function runSolar() {
     lat:          parseFloat($('input-lat').value),
     lon:          parseFloat($('input-lon').value),
     alt:          parseFloat($('input-alt').value),
-    eta:          parseFloat($('eta-panel').value),
+    chi:          parseFloat($('chi-panel').value),
+    NOCT:         parseFloat($('input-NOCT').value),
     area_m2:      parseFloat($('input-area').value),
     n_panels:     parseInt($('input-npanels').value),
+    eta_sys:      parseFloat($('input-etasys').value),
     tilt:         parseFloat($('tilt-angle').value),
     azimuth:      parseFloat($('input-azimuth').value),
     p_nominal_w:  parseFloat($('input-pnominal').value),
@@ -818,11 +836,13 @@ async function runSolar() {
   
   setTimeout(() => {
     try {
+      const eta_ref = payload.p_nominal_w / (1000.0 * payload.area_m2);
       const data = runSolarEngine(
         payload.lat, payload.lon, payload.alt,
-        payload.eta, payload.area_m2, payload.n_panels,
+        eta_ref, payload.area_m2, payload.n_panels,
         payload.tilt, payload.azimuth, payload.p_nominal_w,
-        payload.rain_days, payload.rain_loss, payload.soiling_loss
+        payload.rain_days, payload.rain_loss, payload.soiling_loss,
+        payload.chi, payload.NOCT, payload.eta_sys
       );
 
       // Calcular balance si hay demanda guardada
@@ -900,25 +920,26 @@ async function runSolar() {
   }, 50);
 }
 
-function renderSolarKPIs(stats, balance) {
-  const kpis = [
-    { id: 'kpi-energia', val: formatNum(stats.energia_anual_MWh, 2), unit: 'MWh/año', label: 'Energía generada', color: '#f97316' },
-    { id: 'kpi-fc',      val: formatNum(stats.factor_capacidad_pct, 1), unit: '%', label: 'Factor de capacidad', color: '#fbbf24' },
-    { id: 'kpi-pmax',    val: formatNum(stats.p_max_kW, 2), unit: 'kW', label: 'Pico de generación', color: '#3b82f6' },
-    { id: 'kpi-irrad',   val: formatNum(stats.irrad_poa_kWh_m2, 0), unit: 'kWh/m²', label: 'Irradiación POA anual', color: '#f97316' },
-    { id: 'kpi-hpse',    val: formatNum(stats.horas_pico_sol_equiv, 0), unit: 'hrs', label: 'Horas pico solar equiv.', color: '#10b981' },
-    { id: 'kpi-cob',     val: balance ? formatNum(balance.cobertura_pct, 1) : '—', unit: '%', label: 'Cobertura de demanda', color: '#10b981' },
-  ];
 
-  const container = $('kpi-container');
-  if (container) {
-    container.innerHTML = kpis.map(k => `
-      <div class="kpi-card" style="--kpi-color:${k.color}">
-        <div class="kpi-value">${k.val}<span class="kpi-unit"> ${k.unit}</span></div>
-        <div class="kpi-label">${k.label}</div>
-      </div>`).join('');
-  }
+function renderSolarKPIs(stats, balance) {
+const kpis = [
+{ val: formatNum(stats.energia_anual_MWh, 2),        unit: 'MWh/año',  label: 'Energía generada',           color: '#f97316' },
+{ val: formatNum(stats.factor_capacidad_pct, 1),     unit: '%',        label: 'Factor de capacidad',         color: '#fbbf24' },
+{ val: formatNum(stats.p_max_kW, 2),                 unit: 'kW',       label: 'Pico de generación',          color: '#3b82f6' },
+{ val: formatNum(stats.irrad_poa_kWh_m2, 0),         unit: 'kWh/m²',  label: 'Irradiación POA anual',       color: '#f97316' },
+{ val: formatNum(stats.horas_pico_sol_equiv, 0),     unit: 'hrs',      label: 'Horas pico solar equiv.',     color: '#10b981' },
+{ val: balance ? formatNum(balance.cobertura_pct, 1) : '—', unit: '%', label: 'Cobertura de demanda',        color: '#10b981' },
+];
+
+const container = $('kpi-container');
+if (!container) return;
+container.innerHTML = kpis.map(k => `
+<div class="kpi-card" style="--kpi-color:${k.color}">
+  <div class="kpi-value">${k.val}<span class="kpi-unit"> ${k.unit}</span></div>
+  <div class="kpi-label">${k.label}</div>
+</div>`).join('');
 }
+
 
 function renderSolarCharts(data) {
   const { stats, balance } = data;
@@ -1550,6 +1571,25 @@ function initScrollAnimations() {
 function scrollTo(id) {
   const el = document.getElementById(id);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── η_sys selector ────────────────────────────────────────────────────────
+function setEtaSys(btn, value) {
+  document.querySelectorAll('.eta-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const input   = document.getElementById('input-etasys');
+  const display = document.getElementById('etasys-display');
+  if (value === 'custom') {
+    input.style.display = 'block';
+    display.textContent = 'Valor actual: ' + parseFloat(input.value).toFixed(2);
+    input.oninput = () => {
+      display.textContent = 'Valor actual: ' + parseFloat(input.value).toFixed(2);
+    };
+  } else {
+    input.style.display = 'none';
+    input.value         = value;
+    display.textContent = 'Valor actual: ' + Number(value).toFixed(2);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
