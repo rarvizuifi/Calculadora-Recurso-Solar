@@ -16,7 +16,7 @@ from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 
 from demand_profile import generate_demand_profile, PLANT_PROFILES
-from solar_engine import run_solar_engine
+from solar_engine import run_solar_engine, fetch_tambiente_profile
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
@@ -94,26 +94,44 @@ def api_demand():
                         'trace': traceback.format_exc()}), 400
 
 
-# ─── Motor Solar ─────────────────────────────────────────────────────────────
+# ─── Motor Solar ──────────────────────────────────────────────────────────────
 @app.route('/api/solar', methods=['POST'])
 def api_solar():
     try:
         d = request.get_json(force=True)
 
-        lat         = float(np.clip(float(d.get('lat', 25.67)), -90, 90))
-        lon         = float(d.get('lon', -100.31))
-        alt         = float(d.get('alt', 538))
-        eta         = float(np.clip(float(d.get('eta', 0.20)), 0.05, 0.50))
-        area_m2     = float(d.get('area_m2', 2.0))
-        n_panels    = max(1, int(d.get('n_panels', 50)))
+        lat         = float(np.clip(float(d.get('lat',         25.67)),  -90,  90))
+        lon         = float(d.get('lon',         -100.31))
+
+        # Cachear por coordenada — solo descarga si cambia la ubicación
+        cache_key = f"tambiente_{round(lat, 2)}_{round(lon, 2)}"
+        if cache_key not in _cache:
+            _cache[cache_key] = fetch_tambiente_profile(lat, lon)
+
+        result = run_solar_engine(
+            ...,
+            t_amb_profile=_cache[cache_key]
+        )
+
+        alt         = float(d.get('alt',          538))
+        area_m2     = float(d.get('area_m2',        2.0))
+        n_panels    = max(1, int(d.get('n_panels',   50)))
         tilt        = float(np.clip(float(d.get('tilt', 25.0)), 0, 90))
-        azimuth     = float(d.get('azimuth', 180.0))
-        p_nominal_w = float(d.get('p_nominal_w', 400))
+        azimuth     = float(d.get('azimuth',       180.0))
+        p_nominal_w = float(d.get('p_nominal_w',   400.0))
 
-        result = run_solar_engine(lat, lon, alt, eta, area_m2,
-                                  n_panels, tilt, azimuth, p_nominal_w)
+        eta_sys  = float(np.clip(float(d.get('eta_sys',  0.75)), 0.50, 1.00))
+        noct     = float(np.clip(float(d.get('noct',    45.0)),  35.0, 60.0))
+        chi     = float(np.clip(float(d.get('chi',     0.40)),  0.20,  0.60))
 
-        # Balance si hay demanda en caché
+        result = run_solar_engine(
+            lat=lat, lon=lon, alt=alt,
+            area_m2=area_m2, n_panels=n_panels,
+            tilt=tilt, azimuth=azimuth, p_nominal_w=p_nominal_w,
+            eta_sys=eta_sys, noct=noct, chi=chi,
+        )
+
+        # ── Balance si hay demanda en caché ──────────────────────────────────
         balance = None
         if 'demand' in _cache:
             dem_arr = np.array(_cache['demand']['demand_kW'])
