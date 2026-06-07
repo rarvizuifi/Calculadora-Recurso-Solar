@@ -192,10 +192,22 @@
             <td>538 m (Monterrey)</td>
           </tr>
           <tr>
-            <td class="param-name">Eficiencia η [%]</td>
-            <td>Eficiencia de conversión del panel fotovoltaico</td>
-            <td class="param-range">14% – 25%</td>
-            <td>20% (panel estándar)</td>
+            <td class="param-name">Coeficiente &chi; [%/°C]</td>
+            <td>Coeficiente de temperatura de potencia</td>
+            <td class="param-range">0.20%/°C - 0.60%/°C</td>
+            <td>0.45%/°C (panel estándar)</td>
+          </tr>
+          <tr>
+            <td class="param-name">Coeficiente NOCT [°C]</td>
+            <td>Temperatura nominal de operación de la celda</td>
+            <td class="param-range">40°C - 60°C</td>
+            <td>45°C (panel estándar)</td>
+          </tr>
+          <tr>
+            <td class="param-name"> &eta;_sys [%] </td>
+            <td>Eficiencia del sistema (no del panel; incluye pérdidas por cableado, inversor, suciedad, etc.)</td>
+            <td class="param-range">70% - 90%</td>
+            <td>75% (panel estándar)</td>
           </tr>
           <tr>
             <td class="param-name">Área [m²]</td>
@@ -614,12 +626,11 @@
       </h3>
       <div class="form-grid" style="margin-bottom:1.75rem">
         <div class="form-group">
-          <label class="form-label" for="eta-panel">
-            Eficiencia η <span class="label-unit">[14 – 25 %]</span>
+          <label class="form-label" for="chi-panel">
+            Coeficiente de temperatura de potencia <span class="label-unit">[~ 0.20 – 0.60 %/°C]</span>
           </label>
-          <input type="range" class="form-range" id="eta-panel"
-                 min="0.14" max="0.25" step="0.005" value="0.20" />
-          <div class="range-value" id="eta-panel-val">20%</div>
+          <input type="range" class="form-input" id="chi-panel"
+                 step="0.01" value="0.40" placeholder="Ej: 0.40" />
         </div>
         <div class="form-group">
           <label class="form-label" for="input-area">
@@ -641,6 +652,33 @@
           </label>
           <input type="number" class="form-input" id="input-npanels"
                  step="1" value="50" min="1" placeholder="Ej: 50" />
+        </div>
+              <!-- η_sys -->
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label class="form-label">
+            Eficiencia del sistema <span class="label-unit">η_sys</span>
+          </label>
+          <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">
+            <button type="button" class="eta-btn active" data-value="0.75"
+                    onclick="setEtaSys(this, 0.75)">
+              No sé / estimación general
+            </button>
+            <button type="button" class="eta-btn" data-value="0.80"
+                    onclick="setEtaSys(this, 0.80)">
+              Sistema bien mantenido
+            </button>
+            <button type="button" class="eta-btn" data-value="custom"
+                    onclick="setEtaSys(this, 'custom')">
+              Conozco mi sistema
+            </button>
+          </div>
+          <input type="number" class="form-input" id="input-etasys"
+                 step="0.01" min="0.50" max="1.00" value="0.75"
+                 placeholder="Ej: 0.75" style="display:none;max-width:180px;" />
+          <span id="etasys-display"
+                style="font-size:0.8rem;color:var(--accent-orange);margin-top:0.25rem;display:block;">
+            Valor actual: 0.75
+          </span>
         </div>
       </div>
 
