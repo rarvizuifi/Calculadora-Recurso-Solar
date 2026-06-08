@@ -103,14 +103,27 @@ function calcularROI(params, ahorroBase_mxn) {
   const { capex, opex_pct, vida_util, degradacion, wacc, inflacion } = params;
   const opex_anual = capex * opex_pct;
 
-  const cashflows = [-capex];
+  // CAPEX total (solar + baterías si están activas)
+  const useBat = document.getElementById('toggle-baterias')?.checked;
+  const batCapKwh = parseFloat(document.getElementById('bat-capacidad')?.value ?? 200);
+  const batCostUSD = parseFloat(document.getElementById('bat-costo-kwh')?.value ?? 350);
+  const batVidaUtil = parseInt(document.getElementById('bat-vida-util')?.value ?? 10);
+  const usd_mxn = params.usd_mxn;
+  const bat_capex_mxn = useBat ? batCapKwh * batCostUSD * usd_mxn : 0;
+  const total_capex = capex + bat_capex_mxn;
+
+  const cashflows = [-total_capex];
   const energias  = [];
   const energia_anual_base = state.solarData ? state.solarData.stats.energia_anual_kWh : 0;
 
   for (let y = 1; y <= vida_util; y++) {
     const deg_factor   = Math.pow(1 - degradacion, y - 1);
     const tarif_factor = Math.pow(1 + inflacion, y - 1);
-    const ahorro_y     = ahorroBase_mxn * deg_factor * tarif_factor - opex_anual;
+    let ahorro_y = ahorroBase_mxn * deg_factor * tarif_factor - opex_anual;
+    // Costo de reemplazo de baterías (cada batVidaUtil años, excepto el primero)
+    if (useBat && batVidaUtil > 0 && y % batVidaUtil === 0 && y < vida_util) {
+      ahorro_y -= bat_capex_mxn; // pago de reemplazo
+    }
     cashflows.push(ahorro_y);
     energias.push(energia_anual_base * deg_factor);
   }
@@ -170,7 +183,7 @@ function calcularROI(params, ahorroBase_mxn) {
     cum_discounted.push(cd);
   }
 
-  return { vpn, tir, payback_simple, payback_desc, lcoe, cashflows, cum_simple, cum_discounted, capex, vida_util };
+  return { vpn, tir, payback_simple, payback_desc, lcoe, cashflows, cum_simple, cum_discounted, capex: total_capex, vida_util, bat_capex_mxn };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,7 +225,12 @@ function readEconomicParams() {
     degradacion:          g('degradacion-pct')       || 0.005,
     wacc:                 g('wacc')                  || 0.10,
     inflacion:            g('inflacion-tarifa')      || 0.05,
-    usd_mxn:              usd_mxn
+    usd_mxn:              usd_mxn,
+    // Riesgos y Mermas
+    outage_cost_ens:      g('outage-cost-ens')       || 8.50,
+    outage_cost_fix:      g('outage-cost-fix')       || 5000,
+    merma_maint_cost:     g('merma-maint-cost')      || 3500,
+    merma_fail_cost:      g('merma-fail-cost')       || 85000
   };
 }
 
@@ -227,9 +245,18 @@ function renderEconomicResults(factura, roi, params) {
 
   // KPIs Económicos
   const eKPIs = document.getElementById('economic-kpis-box');
+  const riesgos = state.economicData?.riesgos || { perdidas_riesgos: 0 };
+  const ahorro_real = factura.ahorro - riesgos.perdidas_riesgos;
+  
   if (eKPIs) {
+    const batKpis = [];
+    if (roi.bat_capex_mxn > 0) {
+      batKpis.push({ val: fmDual(roi.bat_capex_mxn, 0), unit: '', label: 'CAPEX Baterías (BESS)', color: '#10b981' });
+    }
     eKPIs.innerHTML = [
-      { val: fmDual(factura.ahorro, 0),         unit: '/año',   label: 'Ahorro anual estimado', color: '#10b981' },
+      { val: fmDual(ahorro_real, 0),            unit: '/año',   label: 'Ahorro real anual estimado', color: '#10b981' },
+      { val: fmDual(riesgos.perdidas_riesgos,0),unit: '/año',   label: 'Pérdidas por riesgos (Apagones/Mermas)', color: '#ef4444' },
+      ...batKpis,
       { val: fmDual(roi.vpn, 0),                unit: '',       label: 'VPN (Valor Pte. Neto)',  color: roi.vpn >= 0 ? '#10b981' : '#ef4444' },
       { val: roi.tir != null ? `${(roi.tir*100).toFixed(1)}%` : '—', unit: '', label: 'TIR',   color: '#f97316' },
       { val: roi.payback_simple ? `${roi.payback_simple} años` : '>vida', unit: '', label: 'Payback simple', color: '#fbbf24' },
@@ -463,9 +490,38 @@ function runEconomics() {
     state.solarData.stats,
     params
   );
-  const roi = calcularROI(params, factura.ahorro);
 
-  state.economicData = { factura, roi, params };
+  // Calcular impacto de riesgos (Mermas y Apagones)
+  let costo_ens = 0;
+  let costo_eventos_apagon = 0;
+  let costo_eventos_mermas = 0;
+
+  if (state.solarData.balance && state.solarData.balance.ens_kWh > 0) {
+    // Si hay baterías activas, usar el ENS residual (mitigado por baterías)
+    const useBat = document.getElementById('toggle-baterias')?.checked;
+    const ens_efectivo = useBat && state.solarData.balance.bat_ens_residual_kwh != null
+      ? state.solarData.balance.bat_ens_residual_kwh
+      : state.solarData.balance.ens_kWh;
+    costo_ens = ens_efectivo * params.outage_cost_ens;
+    if (ens_efectivo > 0) {
+      const freq_outages = parseFloat(document.getElementById('outage-freq')?.value ?? 0);
+      costo_eventos_apagon = freq_outages * params.outage_cost_fix;
+    }
+  }
+
+  if (document.getElementById('toggle-mermas')?.checked) {
+    const maint_freq = parseFloat(document.getElementById('merma-maint-freq')?.value ?? 0);
+    const fail_prob = parseFloat(document.getElementById('merma-fail-prob')?.value ?? 0);
+    costo_eventos_mermas += maint_freq * params.merma_maint_cost;
+    costo_eventos_mermas += (fail_prob / 100.0) * params.merma_fail_cost;
+  }
+
+  const perdidas_riesgos = costo_ens + costo_eventos_apagon + costo_eventos_mermas;
+  const ahorro_real = factura.ahorro - perdidas_riesgos;
+
+  const roi = calcularROI(params, ahorro_real);
+
+  state.economicData = { factura, roi, params, riesgos: { costo_ens, costo_eventos_apagon, costo_eventos_mermas, perdidas_riesgos } };
 
   renderEconomicResults(factura, roi, params);
   renderInvestmentChart(roi, params);

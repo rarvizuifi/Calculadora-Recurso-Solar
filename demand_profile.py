@@ -1,15 +1,74 @@
 """
 demand_profile.py
-Generador de perfil de demanda industrial quinceminutal (15-min).
+=================
+Generador de perfil de demanda industrial quinceminutal (15 min).
 Genera 35,040 puntos = 365 días × 24 hrs × 4 intervalos.
 
-Parámetros completamente configurables por el usuario:
-  - Potencia máxima (libre, en kW)
-  - Factor de carga y potencia
-  - Número de turnos (1, 2 o 3)
-  - Tipo de planta / industria
-  - Factor de operación en fin de semana
-  - Factor de incremento en verano
+═══════════════════════════════════════════════════════════════════════════════
+GLOSARIO DE PARÁMETROS DE ENTRADA — generate_demand_profile()
+───────────────────────────────────────────────────────────────────────────────
+Pmax_kW           [kW]       Potencia máxima de la instalación.
+                              Define la escala absoluta del perfil generado.
+                              Valor libre; sin límite superior.
+
+FC_planta         [frac.]    Factor de Carga de planta: relación entre la potencia
+                              media consumida y la potencia máxima contratada.
+                              FC = P_media / P_max. Rango típico: 0.40–0.90.
+                              Un FC alto indica operación continua y eficiente.
+
+FP_potencia       [frac.]    Factor de Potencia: relación entre potencia activa
+                              (kW) y potencia aparente (kVA). Relevante para
+                              dimensionar el transformador y cargos en la tarifa
+                              eléctrica. Rango: 0.60–1.00. Típico: 0.85–0.95.
+
+n_shifts          [ud.]      Número de turnos de operación diaria.
+                              1 = turno diurno  (06:00–14:00)
+                              2 = dos turnos    (06:00–22:00)
+                              3 = tres turnos   (operación continua 24 h)
+                              Fuera del horario de turno la carga base se reduce
+                              al 20–25 % de la nominal.
+
+plant_type        [texto]    Tipo de perfil de consumo industrial:
+                              'manufactura_ligera' — Turnos bien definidos, picos
+                                                     marcados en horas punta.
+                              'manufactura_pesada' — Alta carga base (≥70 %), poco
+                                                     apagado nocturno, hornos y
+                                                     procesos continuos.
+                              'oficinas'           — HVAC dominante, consumo bajo
+                                                     en noches y fines de semana.
+                              'almacen'            — Horario diurno con poca carga
+                                                     nocturna.
+                              'data_center'        — Carga casi constante 24/7
+                                                     (≥85 % todo el tiempo).
+
+weekend_op_factor [frac.]    Factor multiplicativo de operación en fin de semana
+                              respecto al perfil base de fin de semana.
+                              0.0 = planta cerrada sábados y domingos.
+                              1.0 = operación completa igual que entre semana.
+                              Típico: 0.30–0.60.
+
+summer_boost      [frac.]    Factor de incremento de demanda en meses de verano
+                              (mayo–septiembre). Modela la mayor carga de HVAC,
+                              refrigeración de proceso, etc.
+                              1.0 = sin incremento. Típico: 1.05–1.20.
+
+═══════════════════════════════════════════════════════════════════════════════
+GLOSARIO DE RESULTADOS — dict de retorno
+───────────────────────────────────────────────────────────────────────────────
+demand_kW         [kW, 35040 pts]   Potencia demandada en cada intervalo de 15 min.
+hours             [h,  35040 pts]   Eje de tiempo (0 … 8759.75 h).
+monthly_avg       [kW, 12 vals]     Potencia media mensual [kW].
+monthly_max       [kW, 12 vals]     Potencia máxima mensual [kW].
+monthly_min       [kW, 12 vals]     Potencia mínima mensual [kW].
+monthly_kWh       [kWh, 12 vals]    Energía consumida por mes [kWh/mes].
+daily_weekday     [kW, 96 vals]     Perfil diario promedio de día laboral (96 intervalos).
+daily_weekend     [kW, 96 vals]     Perfil diario promedio de fin de semana.
+stats.pmax_kW                       Potencia máxima ingresada [kW].
+stats.p_media_kW                    Potencia media real calculada [kW].
+stats.p_max_real_kW                 Potencia máxima real del perfil (≈ Pmax × FP) [kW].
+stats.energia_anual_kWh             Energía total anual consumida [kWh/año].
+stats.factor_carga_real             Factor de carga real = P_media / P_max_real [-].
+stats.horas_punta_equiv             Horas equivalentes de plena carga = E_anual / Pmax [h/año].
 """
 
 import numpy as np
