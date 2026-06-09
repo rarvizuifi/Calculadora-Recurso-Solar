@@ -980,7 +980,8 @@ async function fetchTambienteNASA(lat, lon) {
   if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
   const data = await res.json();
   const t2m  = data.properties.parameter.T2M;
-  const rh2m = data.properties.parameter.RH2M || null;
+  if (!t2m) throw new Error('NASA POWER: T2M ausente en la respuesta');
+  const rh2m = data.properties.parameter.RH2M ?? null;
   const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
   const tamb_mensual = months.map(m => t2m[m]);
   const rh_mensual   = rh2m ? months.map(m => rh2m[m]) : null;
