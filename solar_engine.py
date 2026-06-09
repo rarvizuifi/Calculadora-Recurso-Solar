@@ -585,7 +585,7 @@ def run_solar_engine(
         'total_capex_usd'          : round(total_capex, 2),
         'n_paneles'                : n_panels,
         'potencia_nominal_W_panel' : p_nominal_w,
-        'eta'                      : eta,           # guardado por compatibilidad
+        'eta'                      : eta_ref,       # guardado por compatibilidad
         'eta_ref'                  : round(eta_ref, 4),   # NUEVO v2.1
         'chi_pct_por_c'            : chi,           # NUEVO v2.1
         'area_m2'                  : area_m2,

@@ -3,3 +3,5 @@ flask-cors
 numpy
 pandas
 openpyxl
+requests
+beautifulsoup4
