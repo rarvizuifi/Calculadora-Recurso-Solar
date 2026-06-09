@@ -790,11 +790,15 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
         let RH = 0.0;
         let V_wind = 0.0;
 
-        if (tamb_nasa_arr && tamb_nasa_arr.length > idx) {
-          T_amb = tamb_nasa_arr[idx];
+        // Soporte para ambos formatos: { tamb_arr, rh_arr } (nuevo) o Float64Array legacy
+        const nasa_tamb = (tamb_nasa_arr && tamb_nasa_arr.tamb_arr) ? tamb_nasa_arr.tamb_arr : tamb_nasa_arr;
+        const nasa_rh   = (tamb_nasa_arr && tamb_nasa_arr.rh_arr)   ? tamb_nasa_arr.rh_arr   : null;
+
+        if (nasa_tamb && nasa_tamb.length > idx) {
+          T_amb = nasa_tamb[idx];
           if (thermalParams) {
             const isVerano = (month_idx >= 4 && month_idx <= 9);
-            RH = isVerano ? thermalParams.hum_verano : thermalParams.hum_invierno;
+            RH     = nasa_rh ? nasa_rh[idx] : (isVerano ? thermalParams.hum_verano : thermalParams.hum_invierno);
             V_wind = thermalParams.viento;
           }
         } else if (thermalParams) {
@@ -971,27 +975,31 @@ window.setTambMode = function(mode) {
 
 // ── Cliente NASA POWER API (Temperatura ambiente típica) ──
 async function fetchTambienteNASA(lat, lon) {
-  const url = `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=T2M&community=RE&longitude=${lon}&latitude=${lat}&format=JSON`;
+  const url = `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=T2M,RH2M&community=RE&longitude=${lon}&latitude=${lat}&format=JSON`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
   const data = await res.json();
-  const t2m = data.properties.parameter.T2M; // Promedios mensuales
-  // t2m tiene llaves "JAN", "FEB", etc.
-  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const t2m  = data.properties.parameter.T2M;
+  const rh2m = data.properties.parameter.RH2M || null;
+  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
   const tamb_mensual = months.map(m => t2m[m]);
-  
-  // Interpolar a 35,040 puntos (quinceminutal) muy simple
+  const rh_mensual   = rh2m ? months.map(m => rh2m[m]) : null;
+
+  const days_in_month = [31,28,31,30,31,30,31,31,30,31,30,31];
   const tamb_arr = new Float64Array(35040);
-  const days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const rh_arr   = rh_mensual ? new Float64Array(35040) : null;
   let idx = 0;
   for (let m = 0; m < 12; m++) {
-    const pts = days_in_month[m] * 96;
+    const pts  = days_in_month[m] * 96;
     const temp = tamb_mensual[m];
+    const rh   = rh_mensual ? rh_mensual[m] : 0;
     for (let i = 0; i < pts; i++) {
-      tamb_arr[idx++] = temp;
+      tamb_arr[idx] = temp;
+      if (rh_arr) rh_arr[idx] = rh;
+      idx++;
     }
   }
-  return tamb_arr;
+  return { tamb_arr, rh_arr };
 }
 
 async function runSolar() {
@@ -1027,9 +1035,12 @@ async function runSolar() {
   if (useThermal && currentTambMode === 'nasa') {
     try {
       const statusEl = $('nasa-tamb-status');
-      if (statusEl) statusEl.innerHTML = `📡 Obteniendo perfil climatológico desde NASA POWER API...`;
+      if (statusEl) statusEl.innerHTML = `📡 Obteniendo perfil climatológico (T2M + RH2M) desde NASA POWER API...`;
       tamb_nasa_arr = await fetchTambienteNASA(payload.lat, payload.lon);
-      if (statusEl) statusEl.innerHTML = `✅ Perfil horario de temperatura interpolado correctamente (resolución 15min).`;
+      const rhOk = tamb_nasa_arr.rh_arr !== null;
+      if (statusEl) statusEl.innerHTML = rhOk
+        ? `✅ Perfil T_amb + Humedad Relativa descargado de NASA POWER (resolución mensual → 15 min).`
+        : `✅ T_amb de NASA POWER · ⚠️ RH2M no disponible para estas coordenadas — usando humedad manual.`;
     } catch (e) {
       console.error("NASA API Error:", e);
       if ($('nasa-tamb-status')) $('nasa-tamb-status').innerHTML = `⚠️ Falló conexión a NASA (${e.message}). Regresando a modo manual.`;
@@ -1207,10 +1218,40 @@ async function runSolar() {
         const tBox = $('thermal-result-box');
         const tContent = $('thermal-result-content');
         if (tBox && tContent) {
-          const totalGen = data.stats.energia_anual_kWh;
-          const genSinTermico = (data.stats.eta_ref * parseFloat($('input-area').value) * data.stats.horas_pico_sol_equiv * parseInt($('input-npanels').value) * 0.85 * (1.0 - parseFloat($('soiling-loss-pct')?.value ?? 0.05)));
-          const pctThermal = genSinTermico > 0 ? ((genSinTermico - totalGen) / genSinTermico * 100) : 0;
-          tContent.innerHTML = `T_cel verano estimada (mediodía): <strong>${(thermalParams.temp_verano + (800/800)*(thermalParams.noct-20)*(1-0.003*thermalParams.hum_verano)*Math.max(0.1,1-0.1*thermalParams.viento)).toFixed(1)}°C</strong> &nbsp;|&nbsp; Pérdida térmica estimada: <strong style="color:#ef4444">${Math.max(0, pctThermal).toFixed(1)}%</strong>`;
+          const noct_val   = parseFloat($('input-NOCT').value);
+          const viento_val = parseFloat($('viento-vel').value);
+          let tempVerano, humVerano;
+
+          if (tamb_nasa_arr) {
+            // Calcular promedio de meses de verano (mayo–oct, índices 4–9) del perfil NASA
+            const nasaTamb = tamb_nasa_arr.tamb_arr ?? tamb_nasa_arr;
+            const nasaRH   = tamb_nasa_arr.rh_arr   ?? null;
+            const dpm = [31,28,31,30,31,30,31,31,30,31,30,31];
+            let sumT = 0, sumRH = 0, count = 0;
+            let ix = 0;
+            for (let m = 0; m < 12; m++) {
+              const pts = dpm[m] * 96;
+              if (m >= 4 && m <= 9) {
+                for (let i = 0; i < pts; i++) {
+                  sumT += nasaTamb[ix + i];
+                  if (nasaRH) sumRH += nasaRH[ix + i];
+                }
+                count += pts;
+              }
+              ix += pts;
+            }
+            tempVerano = sumT / count;
+            humVerano  = nasaRH ? sumRH / count : (thermalParams?.hum_verano ?? 65);
+          } else {
+            tempVerano = thermalParams.temp_verano;
+            humVerano  = thermalParams.hum_verano;
+          }
+
+          const T_cel = tempVerano + (noct_val - 20) * (1 - 0.003 * humVerano) * Math.max(0.1, 1 - 0.1 * viento_val);
+          const totalGen       = data.stats.energia_anual_kWh;
+          const genSinTermico  = data.stats.eta_ref * parseFloat($('input-area').value) * data.stats.horas_pico_sol_equiv * parseInt($('input-npanels').value) * 0.85 * (1.0 - parseFloat($('soiling-loss-pct')?.value ?? 0.05));
+          const pctThermal     = genSinTermico > 0 ? ((genSinTermico - totalGen) / genSinTermico * 100) : 0;
+          tContent.innerHTML   = `T_cel verano estimada (mediodía): <strong>${T_cel.toFixed(1)}°C</strong> &nbsp;|&nbsp; Pérdida térmica estimada: <strong style="color:#ef4444">${Math.max(0, pctThermal).toFixed(1)}%</strong>`;
           tBox.style.display = '';
         }
       }
