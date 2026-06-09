@@ -313,7 +313,7 @@ def _generate_outage_mask(n_intervals: int, freq_yr: float, avg_h: float,
 # ─────────────────────────────────────────────────────────────────────────────
 def run_solar_engine(
         lat: float, lon: float, alt: float,
-        eta: float, area_m2: float, n_panels: int,
+        eta_stc: float, area_m2: float, n_panels: int,
         tilt: float, azimuth: float, p_nominal_w: float,
         # Pérdidas del sistema
         loss_wiring:    float = 0.02,
@@ -369,7 +369,10 @@ def run_solar_engine(
         T_amb_avg = max(5.0, 30.0 - 0.5 * abs(lat))
 
     # ── eta_ref desde datasheet (NUEVO v2.1) ──────────────────────────────────
-    eta_ref   = p_nominal_w / (1000.0 * area_m2)
+    if eta_stc is not None:
+        eta_ref = eta_stc
+    else:
+        eta_ref = p_nominal_w / (1000.0 * area_m2)
     chi_per_c = chi / 100.0          # %/°C → 1/°C
 
     # ── Perfil T_amb (NUEVO v2.1) ─────────────────────────────────────────────
@@ -451,12 +454,12 @@ def run_solar_engine(
                 Gb_h, Gd_h = _irradiance_horizontal(alpha_eff, n)
                 Gtot       = _poa_irradiance(Gb_h, Gd_h, alpha_eff, az_sun, tilt_r, azimuth_r)
 
-                # Temperatura de celda (Faiman extendido — de Eugenio)
-                T_cell = _cell_temperature(Gtot, T_amb, wind_speed, humidity_pct, NOCT)
+                # Temperatura de celda (Faiman extendido)
+                T_cell = T_amb + (Gtot / 800.0) * (NOCT - 20.0) * (1.0 - 0.003 * humidity_pct) * max(0.1, 1.0 - 0.1 * wind_speed)
 
                 # ── Eficiencia corregida por temperatura (NUEVO v2.1 — de Lucio) ──
                 # η_T = η_ref · [1 − χ · (T_cell − T_STC)]
-                eta_T  = max(0.0, eta_ref * (1.0 - chi_per_c * (T_cell - T_STC)))
+                eta_T  = max(0.0, eta_ref * (1.0 - chi_per_c * (T_cell - 25.0)))
 
                 # Potencia bruta [kW]
                 P_gross = (eta_T * area_m2 * Gtot * n_panels) / 1000.0

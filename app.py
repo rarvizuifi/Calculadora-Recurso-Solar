@@ -308,7 +308,9 @@ def api_solar():
         lat         = float(np.clip(float(d.get('lat', 25.67)), -90, 90))
         lon         = float(d.get('lon', -100.31))
         alt         = float(d.get('alt', 538))
-        eta         = float(np.clip(float(d.get('eta', 0.20)), 0.05, 0.50))
+        eta_stc     = d.get('eta_stc', None)
+        if eta_stc is not None:
+            eta_stc = float(np.clip(float(eta_stc), 0.05, 0.50))
         area_m2     = float(d.get('area_m2', 2.0))
         n_panels    = max(1, int(d.get('n_panels', 50)))
         tilt        = float(np.clip(float(d.get('tilt', 25.0)), 0, 90))
@@ -355,8 +357,7 @@ def api_solar():
 
         result = run_solar_engine(
             lat=lat, lon=lon, alt=alt,
-            eta=eta, area_m2=area_m2,
-            n_panels=n_panels, tilt=tilt, azimuth=azimuth,
+            eta_stc=eta_stc, area_m2=area_m2, n_panels=n_panels, tilt=tilt, azimuth=azimuth,
             p_nominal_w=p_nominal_w,
             loss_wiring=loss_wiring, loss_inverter=loss_inverter,
             loss_dirt=loss_dirt, loss_mismatch=loss_mismatch,
@@ -494,7 +495,7 @@ def api_download_excel():
     ws1.merge_cells('A1:B1')
 
     params = [
-        ('── SISTEMA PV ──', ''),
+        ('── SISTEMA FV ──', ''),
         ('Latitud',                  f"{s['lat']} °"),
         ('Longitud',                 f"{s['lon']} °"),
         ('Altitud',                  f"{s['alt']} m s.n.m."),

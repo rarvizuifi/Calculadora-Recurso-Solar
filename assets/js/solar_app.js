@@ -259,8 +259,6 @@ function initSliders() {
     { slider: 'hum-verano',       display: 'hum-verano-val',       suffix: '%',     multiplier: 1, decimals: 0 },
     { slider: 'hum-invierno',     display: 'hum-invierno-val',     suffix: '%',     multiplier: 1, decimals: 0 },
     { slider: 'viento-vel',       display: 'viento-vel-val',       suffix: ' m/s',  multiplier: 1, decimals: 1 },
-    { slider: 'coef-temp-panel',  display: 'coef-temp-panel-val',  suffix: ' %/°C', multiplier: 1, decimals: 2 },
-    { slider: 'noct-panel',       display: 'noct-panel-val',       suffix: ' °C',   multiplier: 1, decimals: 1 },
     // Baterías
     { slider: 'bat-capacidad',    display: 'bat-capacidad-val',    suffix: ' kWh',  multiplier: 1, decimals: 0 },
     { slider: 'bat-dod',          display: 'bat-dod-val',          suffix: '%',     multiplier: 1, decimals: 0 },
@@ -721,8 +719,8 @@ function generateMermasMask(maintFreq, maintDur, dmgProb, dmgImpact, dmgDurDays,
   return mask;
 }
 
-function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nominal_w, rainDays = 0, rainLossPct = 0.40, soilingLossPct = 0.05, outages = null, outageInverter = 'grid-tied', mermas = null, thermalParams = null, chi = 0.40, noct = 45.0, eta_sys = 0.75) {
-  const eta_ref = p_nominal_w / (1000.0 * area_m2);  // deducido del datasheet
+function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nominal_w, rainDays = 0, rainLossPct = 0.40, soilingLossPct = 0.05, outages = null, outageInverter = 'grid-tied', mermas = null, thermalParams = null, chi = 0.40, noct = 45.0, eta_sys = 0.75, eta_stc = null, tamb_nasa_arr = null) {
+  const eta_ref = (eta_stc !== null && !isNaN(eta_stc)) ? eta_stc : p_nominal_w / (1000.0 * area_m2);
   const chi_per_c = chi / 100.0;
   // Build a Set of day-of-year indices that are rainy (distributed in Jun-Sep: days 152-273)
   const rainyDaySet = new Set();
@@ -780,35 +778,42 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
         // Irradiancia en Plano de Arreglo (POA transposición)
         const Gtot = _poaIrradiance(horiz.Gb_h, horiz.Gd_h, alpha_eff, pos.azimuth, tilt_r, azimuth_r);
 
-        // Generación PV [kW] considerando pérdidas del sistema de 15% (Performance Ratio = 0.85)
+        // Generación FV [kW] considerando pérdidas del sistema de 15% (Performance Ratio = 0.85)
         // Calcular día del año (0-indexed) para aplicar factor de lluvia
         let dayOfYear0 = 0;
         for (let mm = 0; mm < month_idx; mm++) dayOfYear0 += days_in_month[mm];
         dayOfYear0 += (day - 1);
         const rainFactor = rainyDaySet.has(dayOfYear0) ? (1.0 - rainLossPct) : 1.0;
-        // Aplicar eficiencia del módulo, pérdidas del sistema de 15% (PR = 0.85), factor de lluvias, y pérdidas por polvo acumulado (soiling)
-        const t_amb_noct = thermalParams
-          ? (month_idx >= 4 && month_idx <= 9 ? thermalParams.temp_verano : thermalParams.temp_invierno)
-          : 25.0;
-        const t_op = t_amb_noct + (noct - 20.0) * (Gtot / 800.0);
-        const eta_T = Math.max(0, eta_ref * (1.0 - chi_per_c * (t_op - 25.0)));
+        
+        // ── Modelo Térmico Unificado ──
+        let T_amb = 25.0;
+        let RH = 0.0;
+        let V_wind = 0.0;
+
+        if (tamb_nasa_arr && tamb_nasa_arr.length > idx) {
+          T_amb = tamb_nasa_arr[idx];
+          if (thermalParams) {
+            const isVerano = (month_idx >= 4 && month_idx <= 9);
+            RH = isVerano ? thermalParams.hum_verano : thermalParams.hum_invierno;
+            V_wind = thermalParams.viento;
+          }
+        } else if (thermalParams) {
+          const isVerano = (month_idx >= 4 && month_idx <= 9);
+          T_amb  = isVerano ? thermalParams.temp_verano  : thermalParams.temp_invierno;
+          RH     = isVerano ? thermalParams.hum_verano   : thermalParams.hum_invierno;
+          V_wind = thermalParams.viento;
+        }
+
+        let T_cell = T_amb + (noct - 20.0) * (Gtot / 800.0);
+        if (thermalParams && Gtot > 0) {
+          // Faiman extendido (corrige T_cell por humedad y viento)
+          T_cell = T_amb + (Gtot / 800.0) * (noct - 20.0) * (1.0 - 0.003 * RH) * Math.max(0.1, 1.0 - 0.1 * V_wind);
+        }
+
+        // Aplicamos una sola corrección de eficiencia basada en T_cell
+        const eta_T = Math.max(0, eta_ref * (1.0 - chi_per_c * (T_cell - 25.0)));
 
         let P_kw = (eta_T * eta_sys * area_m2 * Gtot * n_panels * rainFactor * (1.0 - soilingLossPct)) / 1000.0;
-
-        // Pérdidas térmicas (modelo NOCT con temperatura y humedad estacionales)
-        let thermalFactor = 1.0;
-        if (thermalParams && Gtot > 0) {
-          const isVerano = (month_idx >= 4 && month_idx <= 9); // Mayo(4) a Octubre(9)
-          const T_amb  = isVerano ? thermalParams.temp_verano  : thermalParams.temp_invierno;
-          const RH     = isVerano ? thermalParams.hum_verano   : thermalParams.hum_invierno;
-          const V_wind = thermalParams.viento;
-          const NOCT   = thermalParams.noct;
-          const gamma  = thermalParams.gamma; // negativo, ej -0.35
-          // Temperatura de celda corregida por humedad y viento
-          const T_cell = T_amb + (Gtot / 800.0) * (NOCT - 20.0) * (1.0 - 0.003 * RH) * Math.max(0.1, 1.0 - 0.1 * V_wind);
-          thermalFactor = Math.max(0.5, 1.0 + (gamma / 100.0) * (T_cell - 25.0));
-          P_kw *= thermalFactor;
-        }
 
         if (mermas && mermas.length > idx) {
           P_kw *= mermas[idx];
@@ -947,7 +952,50 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
   };
 }
 
+// ── Selector de Modo de Temperatura Ambiente ──
+let currentTambMode = 'manual';
+
+window.setTambMode = function(mode) {
+  currentTambMode = mode;
+  document.querySelectorAll('#tamb-mode-buttons .eta-btn').forEach(btn => btn.classList.remove('active'));
+  document.getElementById(`tamb-mode-${mode}`).classList.add('active');
+  
+  if (mode === 'nasa') {
+    document.getElementById('tamb-nasa-panel').style.display = 'block';
+    document.getElementById('tamb-manual-panel').style.display = 'none';
+  } else {
+    document.getElementById('tamb-nasa-panel').style.display = 'none';
+    document.getElementById('tamb-manual-panel').style.display = 'block';
+  }
+};
+
+// ── Cliente NASA POWER API (Temperatura ambiente típica) ──
+async function fetchTambienteNASA(lat, lon) {
+  const url = `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=T2M&community=RE&longitude=${lon}&latitude=${lat}&format=JSON`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
+  const data = await res.json();
+  const t2m = data.properties.parameter.T2M; // Promedios mensuales
+  // t2m tiene llaves "JAN", "FEB", etc.
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const tamb_mensual = months.map(m => t2m[m]);
+  
+  // Interpolar a 35,040 puntos (quinceminutal) muy simple
+  const tamb_arr = new Float64Array(35040);
+  const days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let idx = 0;
+  for (let m = 0; m < 12; m++) {
+    const pts = days_in_month[m] * 96;
+    const temp = tamb_mensual[m];
+    for (let i = 0; i < pts; i++) {
+      tamb_arr[idx++] = temp;
+    }
+  }
+  return tamb_arr;
+}
+
 async function runSolar() {
+  const etaStcVal = parseFloat($('input-etastc')?.value);
   const payload = {
     lat:          parseFloat($('input-lat').value),
     lon:          parseFloat($('input-lon').value),
@@ -957,6 +1005,7 @@ async function runSolar() {
     area_m2:      parseFloat($('input-area').value),
     n_panels:     parseInt($('input-npanels').value),
     eta_sys:      parseFloat($('input-etasys').value),
+    eta_stc:      isNaN(etaStcVal) ? null : etaStcVal,
     tilt:         parseFloat($('tilt-angle').value),
     azimuth:      parseFloat($('input-azimuth').value),
     p_nominal_w:  parseFloat($('input-pnominal').value),
@@ -971,6 +1020,22 @@ async function runSolar() {
   }
 
   showLoader('☀️ Ejecutando Motor de Jensen en el navegador (35,040 pasos)...');
+
+  // Si usa NASA, lo traemos antes de bloquear el hilo
+  let tamb_nasa_arr = null;
+  const useThermal = $('toggle-thermal')?.checked;
+  if (useThermal && currentTambMode === 'nasa') {
+    try {
+      const statusEl = $('nasa-tamb-status');
+      if (statusEl) statusEl.innerHTML = `📡 Obteniendo perfil climatológico desde NASA POWER API...`;
+      tamb_nasa_arr = await fetchTambienteNASA(payload.lat, payload.lon);
+      if (statusEl) statusEl.innerHTML = `✅ Perfil horario de temperatura interpolado correctamente (resolución 15min).`;
+    } catch (e) {
+      console.error("NASA API Error:", e);
+      if ($('nasa-tamb-status')) $('nasa-tamb-status').innerHTML = `⚠️ Falló conexión a NASA (${e.message}). Regresando a modo manual.`;
+      setTambMode('manual');
+    }
+  }
 
   setTimeout(() => {
     try {
@@ -993,15 +1058,12 @@ async function runSolar() {
       ) : null;
 
       // Parámetros térmicos
-      const useThermal = $('toggle-thermal')?.checked;
       const thermalParams = useThermal ? {
         temp_verano:  parseFloat($('temp-amb-verano').value),
         temp_invierno:parseFloat($('temp-amb-invierno').value),
         hum_verano:   parseFloat($('hum-verano').value),
         hum_invierno: parseFloat($('hum-invierno').value),
-        viento:       parseFloat($('viento-vel').value),
-        gamma:        parseFloat($('coef-temp-panel').value),
-        noct:         parseFloat($('noct-panel').value)
+        viento:       parseFloat($('viento-vel').value)
       } : null;
 
       const data = runSolarEngine(
@@ -1010,7 +1072,7 @@ async function runSolar() {
         payload.tilt, payload.azimuth, payload.p_nominal_w,
         payload.rain_days, payload.rain_loss, payload.soiling_loss,
         outagesMask, outageInverter, mermasMask, thermalParams,
-        payload.chi, payload.NOCT, payload.eta_sys
+        payload.chi, payload.NOCT, payload.eta_sys, payload.eta_stc, tamb_nasa_arr
       );
 
       // Calcular balance si hay demanda guardada
@@ -1302,7 +1364,7 @@ function renderSolarCharts(data) {
   // Re-dibujar comparación diaria
   destroyChart('dailyComp');
   const datasets = [{
-    label: 'Generación PV (verano promedio) [kW]',
+    label: 'Generación FV (verano promedio) [kW]',
     data: data.daily_p_summer,
     borderColor: '#fbbf24',
     backgroundColor: 'rgba(251,191,36,0.1)',
@@ -1582,7 +1644,7 @@ function downloadExcel() {
       styleTitle(t1.getCell(1), 'Motor Solar Fotovoltaico — Parámetros de Simulación', 13);
       ws1.addRow([]); // Espacio
 
-      // Categoría: Sistema PV
+      // Categoría: Sistema FV
       const c1 = ws1.addRow([]);
       c1.height = 20;
       styleCategoryHeader(c1, 1, 3, ' ── SISTEMA FOTOVOLTAICO');
@@ -1912,7 +1974,7 @@ function downloadExcel() {
       styleTitle(t3.getCell(1), 'Resumen Mensualizado de Generación y Recurso', 13);
       ws3.addRow([]); // Espacio
 
-      const headers3 = ['MES', 'IRRAD. POA MEDIA [W/m²]', 'IRRAD. POA MÁX [W/m²]', 'GENERACIÓN PV [kWh]'];
+      const headers3 = ['MES', 'IRRAD. POA MEDIA [W/m²]', 'IRRAD. POA MÁX [W/m²]', 'GENERACIÓN FV [kWh]'];
       if (state.demandData) {
         headers3.push('CONSUMO PLANTA [kWh]', 'BALANCE EXCEDENTE [kWh]', 'COBERTURA SOLAR [%]');
       }
@@ -1955,7 +2017,7 @@ function downloadExcel() {
       styleTitle(t4.getCell(1), 'Perfil de Carga y Generación Diario (Promedio Mayo–Agosto)', 13);
       ws4.addRow([]);
 
-      const headers4 = ['INTERVALO', 'HORA', 'IRRAD. POA PROMEDIO [W/m²]', 'POTENCIA PV PROMEDIO [kW]'];
+      const headers4 = ['INTERVALO', 'HORA', 'IRRAD. POA PROMEDIO [W/m²]', 'POTENCIA FV PROMEDIO [kW]'];
       if (state.demandData) headers4.push('DEMANDA PLANTA [kW]');
 
       const h4 = ws4.addRow([]);
@@ -1989,7 +2051,7 @@ function downloadExcel() {
       styleTitle(t5.getCell(1), 'Simulación Completa Anual — Resolución Quinceminutal (15 min)', 13);
       ws5.addRow([]);
 
-      const headers5 = ['PUNTO', 'FECHA Y HORA', 'DÍA DEL AÑO', 'IRRAD. POA [W/m²]', 'POTENCIA PV [kW]'];
+      const headers5 = ['PUNTO', 'FECHA Y HORA', 'DÍA DEL AÑO', 'IRRAD. POA [W/m²]', 'POTENCIA FV [kW]'];
       if (state.demandData) headers5.push('DEMANDA PLANTA [kW]', 'BALANCE NETO [kW]');
       if (state.solarData.outages || state.solarData.mermas) {
         headers5.push('ESTADO RED', 'FACTOR MERMAS');
@@ -2054,7 +2116,7 @@ function downloadExcel() {
       workbook.xlsx.writeBuffer().then((buffer) => {
         saveAs(
           new Blob([buffer], { type: 'application/octet-stream' }),
-          'Reporte_Simulacion_PV_Jensen_GDMTH.xlsx'
+          'Reporte_Simulacion_FV_Jensen_GDMTH.xlsx'
         );
       }).catch((err) => {
         alert(`Error al escribir Excel: ${err.message}`);

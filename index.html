@@ -279,7 +279,7 @@
     <a href="#guia">Guía de Datos</a>
     <a href="#demanda">Demanda</a>
     <a href="#economia">Tarifas CFE</a>
-    <a href="#solar">Sistema PV</a>
+    <a href="#solar">Sistema FV</a>
     <a href="#resultados">Resultados</a>
   </div>
 </nav>
@@ -367,7 +367,7 @@
         <h3>Resultados y Descarga</h3>
         <p>
           Obtendrás KPIs, gráficas interactivas y estadísticas clave del balance energético.
-          Puedes descargar un CSV con todos los datos anuales: irradiancia POA, generación PV
+          Puedes descargar un CSV con todos los datos anuales: irradiancia POA, generación FV
           y demanda, con fecha-hora en cada fila.
         </p>
       </div>
@@ -603,12 +603,12 @@
 
         <div class="form-group">
           <label class="form-label" for="rain-loss-pct">
-            Pérdida PV por día lluvioso <span class="label-unit">[10 – 80 %]</span>
+            Pérdida FV por día lluvioso <span class="label-unit">[10 – 80 %]</span>
           </label>
           <input type="range" class="form-range" id="rain-loss-pct"
                  min="0.10" max="0.80" step="0.05" value="0.40" />
           <div class="range-value" id="rain-loss-pct-val">40%</div>
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem">Reducción de generación PV en días con cobertura nubosa significativa</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem">Reducción de generación FV en días con cobertura nubosa significativa</div>
         </div>
 
         <div class="form-group">
@@ -744,7 +744,7 @@
         <div class="form-group">
           <label class="form-label" for="cargo-respaldo">Cargo por Demanda de Respaldo <span class="label-unit">[$/kW/mes MXN]</span></label>
           <input type="number" class="form-input" id="cargo-respaldo" step="0.01" value="67.23" />
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Aplica sobre la capacidad PV instalada como cargo de respaldo de red</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Aplica sobre la capacidad FV instalada como cargo de respaldo de red</div>
         </div>
         <div class="form-group">
           <label class="form-label" for="factor-respaldo">Factor de Demanda Respaldo <span class="label-unit">[0 – 100 %]</span></label>
@@ -809,7 +809,7 @@
 <div class="section-divider-line"></div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     SECCIÓN 2: CONFIGURACIÓN DEL SISTEMA PV
+     SECCIÓN 2: CONFIGURACIÓN DEL SISTEMA FV
 ════════════════════════════════════════════════════════════════════════════ -->
 <section id="solar" class="section">
   <div class="section-inner">
@@ -991,7 +991,7 @@
 
       <!-- Especificaciones del panel -->
       <h3 style="font-size:0.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;">
-        🔆 Especificaciones del Panel PV
+        🔆 Especificaciones del Panel FV
       </h3>
       <div class="form-grid" style="margin-bottom:1.75rem">
         <div class="form-group">
@@ -1022,6 +1022,17 @@
           </label>
           <input type="number" class="form-input" id="input-pnominal"
                  step="5" value="400" placeholder="Ej: 400" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="input-etastc">
+            Eficiencia STC del panel <span class="label-unit">[opcional — fracción 0.05 – 0.30]</span>
+          </label>
+          <input type="number" class="form-input" id="input-etastc"
+                 step="0.01" min="0.05" max="0.30" placeholder="Auto (se calcula de P_nom / Área)" />
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem">
+            Si lo dejas vacío, se calcula automáticamente como <strong>η = P<sub>nom</sub> / (1000 × A)</strong>.
+            Ingresa un valor solo si conoces la eficiencia declarada por el fabricante.
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label" for="input-npanels">
@@ -1084,7 +1095,7 @@
       <div id="solar-alert"></div>
 
       <button class="btn btn-primary btn-full" id="btn-solar" style="margin-top:1rem">
-        <span>☀️</span> Ejecutar Motor de Jensen — Calcular Sistema PV
+        <span>☀️</span> Ejecutar Motor de Jensen — Calcular Sistema FV
       </button>
     </div>
 
@@ -1124,7 +1135,7 @@
               <option value="grid-tied">Grid-Tied (Se apaga en apagones)</option>
               <option value="hybrid">Híbrido / Microred (Backup activo)</option>
             </select>
-            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Grid-Tied: PV = 0kW. Híbrido: PV sigue generando.</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Grid-Tied: FV = 0kW. Híbrido: FV sigue generando.</div>
           </div>
           
           <div class="form-group">
@@ -1235,56 +1246,88 @@
     <div class="section-header fade-in">
       <span class="section-tag tag-blue">🌡️ Modelo Climático</span>
       <h2 class="section-title">Ingeniería Climática y Pérdidas Térmicas</h2>
-      <p class="section-desc">Configura las condiciones ambientales estacionales para calcular la temperatura real de la celda y las pérdidas de rendimiento por calor.</p>
+      <p class="section-desc">Configura las condiciones ambientales para calcular la temperatura real de la celda y las pérdidas de rendimiento por calor. Puedes usar datos históricos o ingresar valores manualmente.</p>
     </div>
 
     <div class="card card-lg fade-in">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
-        <h3 style="font-size:1.1rem;color:var(--accent-blue);margin:0;">🌤️ Parámetros Ambientales Estacionales</h3>
+        <h3 style="font-size:1.1rem;color:var(--accent-blue);margin:0;">🌤️ Perfil de Temperatura Ambiente</h3>
         <label class="toggle-switch">
           <input type="checkbox" id="toggle-thermal" />
           <span class="toggle-slider"></span>
         </label>
       </div>
       <div id="thermal-panel" style="display:none;">
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1.5rem;">El modelo NOCT calcula la temperatura real de la celda solar en función de la irradiancia, temperatura ambiente, humedad y enfriamiento por viento. Separamos Verano (May–Oct) e Invierno (Nov–Abr).</p>
+        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1.5rem;">
+          El modelo calcula la temperatura de la celda usando NOCT + Faiman extendido (con viento y humedad).
+          Selecciona cómo deseas obtener la temperatura ambiente:
+        </p>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
-          <div style="background:rgba(249,115,22,0.05);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:1.25rem;">
-            <div style="font-size:0.8rem;font-weight:700;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;">☀️ Verano (Mayo – Octubre)</div>
-            <div class="form-group">
-              <label class="form-label" for="temp-amb-verano">Temp. Ambiente <span class="label-unit">[°C]</span></label>
-              <input type="range" class="form-range" id="temp-amb-verano" min="15" max="50" step="0.5" value="32" />
-              <div class="range-value" id="temp-amb-verano-val">32.0 °C</div>
-            </div>
-            <div class="form-group" style="margin-top:1rem;">
-              <label class="form-label" for="hum-verano">Humedad Relativa <span class="label-unit">[%]</span></label>
-              <input type="range" class="form-range" id="hum-verano" min="0" max="100" step="1" value="65" />
-              <div class="range-value" id="hum-verano-val">65%</div>
-            </div>
+        <!-- Selector de modo T_amb -->
+        <div style="display:flex;gap:0.75rem;margin-bottom:1.5rem;flex-wrap:wrap;" id="tamb-mode-buttons">
+          <button type="button" class="eta-btn" id="tamb-mode-nasa" onclick="setTambMode('nasa')" style="flex:1;min-width:200px;padding:0.75rem 1rem;text-align:left;">
+            <div style="font-weight:700;margin-bottom:0.25rem;">🌐 Temperatura histórica (NASA POWER)</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);">Perfil horario promedio 10 años para tu lat/lon. Se obtiene automáticamente.</div>
+          </button>
+          <button type="button" class="eta-btn active" id="tamb-mode-manual" onclick="setTambMode('manual')" style="flex:1;min-width:200px;padding:0.75rem 1rem;text-align:left;">
+            <div style="font-weight:700;margin-bottom:0.25rem;">🌡️ Definir manualmente por estación</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);">Ingresa T_amb de verano e invierno con sliders.</div>
+          </button>
+        </div>
+
+        <!-- Panel NASA POWER -->
+        <div id="tamb-nasa-panel" style="display:none;background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:1.25rem;margin-bottom:1.5rem;">
+          <div style="font-size:0.8rem;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.75rem;">🌐 NASA POWER — Perfil Típico Anual</div>
+          <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem;">
+            Al ejecutar el Motor de Jensen, se descargará automáticamente el perfil horario de temperatura
+            (promedio 2014–2023) desde <strong>NASA POWER API</strong> para las coordenadas configuradas.
+            Se interpola a resolución quinceminutal (35,040 puntos).
+          </p>
+          <div id="nasa-tamb-status" style="font-size:0.82rem;color:#94a3b8;">
+            ⏳ El perfil se descargará al ejecutar el cálculo solar.
           </div>
+        </div>
 
-          <div style="background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.15);border-radius:12px;padding:1.25rem;">
-            <div style="font-size:0.8rem;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;">❄️ Invierno (Nov – Abril)</div>
-            <div class="form-group">
-              <label class="form-label" for="temp-amb-invierno">Temp. Ambiente <span class="label-unit">[°C]</span></label>
-              <input type="range" class="form-range" id="temp-amb-invierno" min="0" max="35" step="0.5" value="15" />
-              <div class="range-value" id="temp-amb-invierno-val">15.0 °C</div>
+        <!-- Panel Manual (sliders de Verano / Invierno) -->
+        <div id="tamb-manual-panel">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+            <div style="background:rgba(249,115,22,0.05);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:1.25rem;">
+              <div style="font-size:0.8rem;font-weight:700;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;">☀️ Verano (Mayo – Octubre)</div>
+              <div class="form-group">
+                <label class="form-label" for="temp-amb-verano">Temp. Ambiente <span class="label-unit">[°C]</span></label>
+                <input type="range" class="form-range" id="temp-amb-verano" min="15" max="50" step="0.5" value="32" />
+                <div class="range-value" id="temp-amb-verano-val">32.0 °C</div>
+              </div>
+              <div class="form-group" style="margin-top:1rem;">
+                <label class="form-label" for="hum-verano">Humedad Relativa <span class="label-unit">[%]</span></label>
+                <input type="range" class="form-range" id="hum-verano" min="0" max="100" step="1" value="65" />
+                <div class="range-value" id="hum-verano-val">65%</div>
+              </div>
             </div>
-            <div class="form-group" style="margin-top:1rem;">
-              <label class="form-label" for="hum-invierno">Humedad Relativa <span class="label-unit">[%]</span></label>
-              <input type="range" class="form-range" id="hum-invierno" min="0" max="100" step="1" value="35" />
-              <div class="range-value" id="hum-invierno-val">35%</div>
+
+            <div style="background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.15);border-radius:12px;padding:1.25rem;">
+              <div style="font-size:0.8rem;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;">❄️ Invierno (Nov – Abril)</div>
+              <div class="form-group">
+                <label class="form-label" for="temp-amb-invierno">Temp. Ambiente <span class="label-unit">[°C]</span></label>
+                <input type="range" class="form-range" id="temp-amb-invierno" min="0" max="35" step="0.5" value="15" />
+                <div class="range-value" id="temp-amb-invierno-val">15.0 °C</div>
+              </div>
+              <div class="form-group" style="margin-top:1rem;">
+                <label class="form-label" for="hum-invierno">Humedad Relativa <span class="label-unit">[%]</span></label>
+                <input type="range" class="form-range" id="hum-invierno" min="0" max="100" step="1" value="35" />
+                <div class="range-value" id="hum-invierno-val">35%</div>
+              </div>
             </div>
           </div>
         </div>
 
+        <!-- Viento (siempre visible) -->
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label" for="viento-vel">Velocidad del Viento <span class="label-unit">[m/s]</span></label>
             <input type="range" class="form-range" id="viento-vel" min="0" max="15" step="0.5" value="3" />
             <div class="range-value" id="viento-vel-val">3.0 m/s</div>
-            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Mayor viento → más enfriamiento → menos pérdidas.</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Mayor viento → más enfriamiento convectivo → menos pérdidas térmicas.</div>
           </div>
         </div>
 
@@ -1319,7 +1362,7 @@
         </label>
       </div>
       <div id="baterias-panel" style="display:none;">
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1.5rem;">Durante un apagón, la batería descarga su energía para suplir la demanda de la planta hasta agotarse (limitado por DoD). En operación normal, el excedente PV carga la batería.</p>
+        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1.5rem;">Durante un apagón, la batería descarga su energía para suplir la demanda de la planta hasta agotarse (limitado por DoD). En operación normal, el excedente FV carga la batería.</p>
 
         <div class="form-grid">
           <div class="form-group">
@@ -1400,13 +1443,13 @@
           <canvas id="chart-gtot-monthly" height="220"></canvas>
         </div>
         <div class="chart-container">
-          <div class="chart-title">Generación PV Mensual [kWh]</div>
+          <div class="chart-title">Generación FV Mensual [kWh]</div>
           <canvas id="chart-gen-monthly" height="220"></canvas>
         </div>
       </div>
 
       <div class="chart-container fade-in">
-        <div class="chart-title">Perfil Diario — Generación PV vs. Demanda (Promedio Verano)</div>
+        <div class="chart-title">Perfil Diario — Generación FV vs. Demanda (Promedio Verano)</div>
         <canvas id="chart-daily-comp" height="140"></canvas>
       </div>
 
