@@ -471,6 +471,12 @@
             <td class="param-range">1 – 1,000</td>
             <td>50 paneles</td>
           </tr>
+          <tr>
+            <td class="param-name">&eta;_ref STC [fracción]</td>
+            <td>Eficiencia real del panel en condiciones STC. <em>Opcional</em>: si se omite, se calcula automáticamente como P<sub>nom</sub> / (1000 × A)</td>
+            <td class="param-range">0.05 – 0.30 (opcional)</td>
+            <td>0.20, o vacío = auto</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -990,7 +996,7 @@
       </div>
 
       <!-- Especificaciones del panel -->
-      <h3 style="font-size:0.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;">
+      <h3 style="font-size:0.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-top:2.5rem;margin-bottom:1rem;">
         🔆 Especificaciones del Panel FV
       </h3>
       <div class="form-grid" style="margin-bottom:1.75rem">
