@@ -1063,7 +1063,8 @@ async function runSolar() {
         temp_invierno:parseFloat($('temp-amb-invierno').value),
         hum_verano:   parseFloat($('hum-verano').value),
         hum_invierno: parseFloat($('hum-invierno').value),
-        viento:       parseFloat($('viento-vel').value)
+        viento:       parseFloat($('viento-vel').value),
+        noct:         parseFloat($('input-NOCT').value)
       } : null;
 
       const data = runSolarEngine(
