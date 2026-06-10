@@ -493,7 +493,16 @@ async function fetchCFETariff() {
   if (badge) badge.textContent = '⏳ Obteniendo tarifas desde CFE...';
 
   try {
-    const res  = await fetch('/api/cfe_gdmto');
+    const lat  = parseFloat(document.getElementById('cfe-lat')?.value  || '25.67');
+    const lon  = parseFloat(document.getElementById('cfe-lon')?.value  || '-100.31');
+    const anio = parseInt(document.getElementById('cfe-anio')?.value   || new Date().getFullYear());
+    const mes  = parseInt(document.getElementById('cfe-mes')?.value    || (new Date().getMonth() + 1));
+
+    const res  = await fetch('/api/cfe_gdmto_tarifa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lon, anio, mes })
+    });
     const data = await res.json();
     _cfeDivisiones = data.divisiones || [];
 
@@ -514,7 +523,7 @@ async function fetchCFETariff() {
     const esFallback = data.fuente === 'fallback';
     if (badge) badge.textContent = esFallback
       ? `⚠️ Valores de respaldo (CFE no accesible) · ${data.fecha}`
-      : `✅ Tarifas de CFE · ${data.fecha}`;
+      : `✅ Tarifas CFE en vivo · ${data.division ? data.division + ' · ' : ''}${data.fecha}`;
 
   } catch (e) {
     if (badge) badge.textContent = `❌ Error al consultar CFE: ${e.message}. Ajusta los valores manualmente.`;

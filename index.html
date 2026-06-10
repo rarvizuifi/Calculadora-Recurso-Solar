@@ -1686,6 +1686,30 @@
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') e.preventDefault();
     });
+
+    // ── CFE Location Autocomplete ──────────────────────────────────────
+    const cfeInput  = document.getElementById('cfe-address-search');
+    const cfeStatus = document.getElementById('cfe-address-status');
+    if (cfeInput) {
+      const cfeAuto = new google.maps.places.Autocomplete(cfeInput, {
+        fields: ['formatted_address', 'geometry', 'name'],
+        componentRestrictions: { country: ['mx'] },
+      });
+      cfeAuto.addListener('place_changed', () => {
+        const place = cfeAuto.getPlace();
+        if (!place.geometry?.location) {
+          if (cfeStatus) { cfeStatus.className = 'geo-status err'; cfeStatus.textContent = '⚠️ No se encontraron coordenadas.'; }
+          return;
+        }
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        document.getElementById('cfe-lat').value = lat.toFixed(6);
+        document.getElementById('cfe-lon').value = lng.toFixed(6);
+        if (typeof syncCFELocationToSolar === 'function') syncCFELocationToSolar();
+        if (cfeStatus) { cfeStatus.className = 'geo-status ok'; cfeStatus.textContent = `✅ ${place.formatted_address || place.name}`; }
+      });
+      cfeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    }
   }
 
   // Si Google Maps no carga (sin internet, key mal, etc.) el input sigue siendo usable
@@ -1976,6 +2000,70 @@
         }, 2200);
 
         computeAndRender();
+      });
+    }
+
+    // ── syncCFELocationToSolar ──────────────────────────────────────────
+    function syncCFELocationToSolar() {
+      const toggle = document.getElementById('toggle-use-cfe-location');
+      if (!toggle || !toggle.checked) return;
+      const latVal = document.getElementById('cfe-lat')?.value;
+      const lonVal = document.getElementById('cfe-lon')?.value;
+      if (latVal) { const el = document.getElementById('input-lat'); if (el) { el.value = latVal; el.dispatchEvent(new Event('input', { bubbles: true })); } }
+      if (lonVal) { const el = document.getElementById('input-lon'); if (el) { el.value = lonVal; el.dispatchEvent(new Event('input', { bubbles: true })); } }
+    }
+
+    // ── Toggle: Usar misma ubicación que CFE ────────────────────────────
+    const toggleCFE = document.getElementById('toggle-use-cfe-location');
+    const solPicker = document.getElementById('solar-location-picker');
+    if (toggleCFE) {
+      const applyToggle = () => {
+        const isOn = toggleCFE.checked;
+        if (solPicker) solPicker.style.display = isOn ? 'none' : '';
+        ['input-lat', 'input-lon'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.readOnly = isOn;
+        });
+        if (isOn) syncCFELocationToSolar();
+      };
+      toggleCFE.addEventListener('change', applyToggle);
+      applyToggle();
+    }
+
+    // Sync manual cfe-lat/cfe-lon edits to Solar Config
+    ['cfe-lat', 'cfe-lon'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', syncCFELocationToSolar);
+    });
+
+    // ── CFE GPS button ──────────────────────────────────────────────────
+    const cfeBtnGeo    = document.getElementById('btn-cfe-geolocate');
+    const cfeGeoStatus = document.getElementById('cfe-geo-status');
+    if (cfeBtnGeo) {
+      cfeBtnGeo.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+          if (cfeGeoStatus) { cfeGeoStatus.className = 'geo-status err'; cfeGeoStatus.textContent = '⚠️ Tu navegador no soporta geolocalización.'; }
+          return;
+        }
+        cfeBtnGeo.classList.add('loading');
+        cfeBtnGeo.textContent = '⏳ Obteniendo ubicación…';
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            document.getElementById('cfe-lat').value = pos.coords.latitude.toFixed(6);
+            document.getElementById('cfe-lon').value = pos.coords.longitude.toFixed(6);
+            syncCFELocationToSolar();
+            cfeBtnGeo.classList.remove('loading');
+            cfeBtnGeo.innerHTML = '<span>📡</span> Usar mi ubicación actual (GPS)';
+            if (cfeGeoStatus) { cfeGeoStatus.className = 'geo-status ok'; cfeGeoStatus.textContent = `✅ ${pos.coords.latitude.toFixed(5)}°, ${pos.coords.longitude.toFixed(5)}° (±${Math.round(pos.coords.accuracy)} m)`; }
+          },
+          (err) => {
+            cfeBtnGeo.classList.remove('loading');
+            cfeBtnGeo.innerHTML = '<span>📡</span> Usar mi ubicación actual (GPS)';
+            const msgs = { 1: 'Permiso denegado.', 2: 'Posición no disponible.', 3: 'Tiempo de espera agotado.' };
+            if (cfeGeoStatus) { cfeGeoStatus.className = 'geo-status err'; cfeGeoStatus.textContent = '⚠️ ' + (msgs[err.code] || 'Error.'); }
+          },
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+        );
       });
     }
 
