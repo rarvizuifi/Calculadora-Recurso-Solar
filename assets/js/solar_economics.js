@@ -108,7 +108,7 @@ function calcularROI(params, ahorroBase_mxn) {
 
   // Payback simple
   let payback_simple = null;
-  let cum = -capex;
+  let cum = -total_capex;
   for (let y = 1; y < cashflows.length; y++) {
     cum += cashflows[y];
     if (cum >= 0 && payback_simple === null) payback_simple = y;
@@ -116,7 +116,7 @@ function calcularROI(params, ahorroBase_mxn) {
 
   // Payback descontado
   let payback_desc = null;
-  let cum_disc = -capex;
+  let cum_disc = -total_capex;
   for (let y = 1; y < cashflows.length; y++) {
     cum_disc += cashflows[y] / Math.pow(1 + wacc, y);
     if (cum_disc >= 0 && payback_desc === null) payback_desc = y;
@@ -128,12 +128,12 @@ function calcularROI(params, ahorroBase_mxn) {
     const opex_y = opex_anual;
     return s + opex_y / Math.pow(1 + wacc, i + 1);
   }, 0);
-  const lcoe = sum_disc_energy > 0 ? (capex + sum_disc_cost) / sum_disc_energy : null;
+  const lcoe = sum_disc_energy > 0 ? (total_capex + sum_disc_cost) / sum_disc_energy : null;
 
   // Series acumuladas año a año (para la gráfica)
   const cum_simple    = [];
   const cum_discounted= [];
-  let cs = -capex, cd = -capex;
+  let cs = -total_capex, cd = -total_capex;
   for (let y = 1; y < cashflows.length; y++) {
     cs += cashflows[y];
     cd += cashflows[y] / Math.pow(1 + wacc, y);

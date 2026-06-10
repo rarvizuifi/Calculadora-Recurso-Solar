@@ -940,6 +940,7 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
     monthly_gtot_avg,
     monthly_gtot_max,
     monthly_gen_kWh,
+    daily_gtot_summer: Array.from(daily_gtot_summer),
     daily_p_summer: Array.from(daily_p_summer),
     mermas,
     stats
@@ -1240,7 +1241,7 @@ async function runSolar() {
 
           const T_cel = tempVerano + (noct_val - 20) * (1 - 0.003 * humVerano) * Math.max(0.1, 1 - 0.1 * viento_val);
           const totalGen       = data.stats.energia_anual_kWh;
-          const genSinTermico  = data.stats.eta_ref * parseFloat($('input-area').value) * data.stats.horas_pico_sol_equiv * parseInt($('input-npanels').value) * 0.85 * (1.0 - parseFloat($('soiling-loss-pct')?.value ?? 0.05));
+          const genSinTermico  = data.stats.eta_ref * parseFloat($('input-area').value) * data.stats.horas_pico_sol_equiv * parseInt($('input-npanels').value) * (data.stats.eta_sys ?? 0.85) * (1.0 - parseFloat($('soiling-loss-pct')?.value ?? 0.05));
           const pctThermal     = genSinTermico > 0 ? ((genSinTermico - totalGen) / genSinTermico * 100) : 0;
           tContent.innerHTML   = `T_cel verano estimada (mediodía): <strong>${T_cel.toFixed(1)}°C</strong> &nbsp;|&nbsp; Pérdida térmica estimada: <strong style="color:#ef4444">${Math.max(0, pctThermal).toFixed(1)}%</strong>`;
           tBox.style.display = '';
@@ -1690,7 +1691,8 @@ function downloadExcel() {
         ['Latitud del Emplazamiento', s.lat, '° (Positivo = Norte)'],
         ['Longitud del Emplazamiento', s.lon, '° (Positivo = Este)'],
         ['Altitud sobre el nivel del mar', s.alt, 'm s.n.m.'],
-        ['Eficiencia del Módulo Fotovoltaico (η)', s.eta, 'fracción decimal'],
+        ['Eficiencia STC del Módulo (η_ref)', (s.eta_ref ?? s.eta ?? 0) * 100, '% (condiciones estándar)'],
+        ['Eficiencia del Sistema (η_sys, con pérdidas)', (s.eta_sys ?? s.eta_ref ?? s.eta ?? 0) * 100, '% (incluyendo NOCT y χ)'],
         ['Área Superficial Frontal de un Panel', s.area_m2, 'm²'],
         ['Potencia Nominal de Placa Unitario', s.potencia_nominal_W_panel, 'W'],
         ['Cantidad Total de Módulos (N)', s.n_paneles, 'paneles'],
@@ -1754,6 +1756,7 @@ function downloadExcel() {
         h3.height = 20;
         styleTableHeader(h3, ['PARÁMETRO', 'VALOR DE ENTRADA', 'UNIDAD']);
 
+        const _gv = id => parseFloat($(`${id}`)?.value || 0) || 0;
         const econParams = [
           ['CAPEX (Inversión Inicial Total)', ec.capex, 'MXN'],
           ['OPEX Anual (% del CAPEX)', ec.opex_pct * 100, '%/año'],
@@ -1761,11 +1764,12 @@ function downloadExcel() {
           ['Tasa de Descuento (WACC)', ec.wacc * 100, '% nominal'],
           ['Tasa de Inflación Tarifaria', ec.inflacion * 100, '% anual'],
           ['Tipo de Cambio Utilizado', ec.usd_mxn, 'MXN/USD'],
-          ['CFE Factor de Respaldo Contratado', ec.factor_respaldo * 100, '% de la demanda contratada'],
-          ['CFE Precio Energía GDMTO', ec.precio_kwh, 'MXN/kWh'],
+          ['CFE Precio Energía GDMTO (Variable)', ec.precio_kwh, 'MXN/kWh'],
           ['CFE Cargo Fijo Mensual', ec.cargo_fijo_mensual, 'MXN/mes'],
-          ['CFE Cargo por Demanda Máxima', ec.cargo_demanda_punta, 'MXN/kW/mes'],
-          ['CFE Cargo Respaldo Solar', ec.cargo_respaldo, 'MXN/kW/mes'],
+          ['CFE Cargo por Distribución', _gv('cargo-distribucion') || 57.74, 'MXN/kW/mes'],
+          ['CFE Cargo por Capacidad', _gv('cargo-capacidad') || 334.65, 'MXN/kW/mes'],
+          ['CFE Cargo por Transmisión', _gv('cargo-transmision') || 89.12, 'MXN/kW/mes'],
+          ['CFE Cargo por Demanda Total (Dist+Cap+Trans)', ec.cargo_demanda, 'MXN/kW/mes'],
           ['Costo Energía No Suministrada (ENS)', ec.outage_cost_ens, 'MXN/kWh'],
           ['Costo Fijo por Apagón', ec.outage_cost_fix, 'MXN/evento'],
           ['Costo por Mantenimiento', ec.merma_maint_cost, 'MXN/evento'],
@@ -1961,7 +1965,7 @@ function downloadExcel() {
 
         const kpisEcon = [
           ['Factura CFE Anual Sin Solar', factura.factura_sin, 'MXN/año', 'Costo total estimado del consumo eléctrico sin la planta solar.'],
-          ['Factura CFE Anual Con Solar', factura.factura_con, 'MXN/año', 'Costo residual del consumo de red más el cargo por respaldo y cargo fijo.'],
+          ['Factura CFE Anual Con Solar', factura.factura_con, 'MXN/año', 'Costo residual del consumo de red: energía + cargo por demanda + cargo fijo mensual.'],
           ['Ahorro Económico Neto Anual', factura.ahorro, 'MXN/año', 'Diferencia neta a favor generada por la inyección de energía solar.'],
           ['CAPEX Total del Proyecto (Solar + BESS)', roi.capex, 'MXN', 'Inversión inicial total incluyendo baterías si están activas.'],
           ['CAPEX Baterías (BESS)', roi.bat_capex_mxn || 0, 'MXN', 'Costo del banco de baterías incluido en el CAPEX total.'],

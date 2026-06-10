@@ -813,7 +813,7 @@
             </label>
           </div>
           <div id="transmision-field-wrap" style="display:none">
-            <input type="number" class="form-input" id="cargo-transmision" step="0.01" value="89.12" />
+            <input type="number" class="form-input" id="cargo-transmision" step="0.01" value="0" />
             <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Red de transmisión — aplicado sobre la demanda máxima. No publicado en app.cfe.mx; tómalo de tu recibo CFE.</div>
           </div>
           <div id="transmision-default-note" style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem">
@@ -1741,8 +1741,7 @@
 <script src="assets/js/solar_economics.js"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     ÁNGULOS ÓPTIMOS — Motor de cálculo en tiempo real
-     Toda la física se realiza en el cliente; no requiere llamada al servidor.
+     ÁNGULOS ÓPTIMOS — Motor de cálculo en tiempo real (cliente)
 ════════════════════════════════════════════════════════════════════════════ -->
 <script>
 (function() {
@@ -2018,14 +2017,21 @@
     }
 
     // ── syncCFELocationToSolar ──────────────────────────────────────────
-    function syncCFELocationToSolar() {
+    window.syncCFELocationToSolar = function syncCFELocationToSolar() {
       const toggle = document.getElementById('toggle-use-cfe-location');
       if (!toggle || !toggle.checked) return;
       const latVal = document.getElementById('cfe-lat')?.value;
       const lonVal = document.getElementById('cfe-lon')?.value;
       if (latVal) { const el = document.getElementById('input-lat'); if (el) { el.value = latVal; el.dispatchEvent(new Event('input', { bubbles: true })); } }
       if (lonVal) { const el = document.getElementById('input-lon'); if (el) { el.value = lonVal; el.dispatchEvent(new Event('input', { bubbles: true })); } }
-    }
+      const lat = parseFloat(latVal), lon = parseFloat(lonVal);
+      if (!isNaN(lat) && !isNaN(lon)) {
+        fetchElevation(lat, lon).then(alt => {
+          const altEl = document.getElementById('input-alt');
+          if (altEl) { altEl.value = alt; altEl.dispatchEvent(new Event('input', { bubbles: true })); }
+        }).catch(() => {});
+      }
+    };
 
     // ── Toggle: Usar misma ubicación que CFE ────────────────────────────
     const toggleCFE = document.getElementById('toggle-use-cfe-location');
@@ -2034,7 +2040,7 @@
       const applyToggle = () => {
         const isOn = toggleCFE.checked;
         if (solPicker) solPicker.style.display = isOn ? 'none' : '';
-        ['input-lat', 'input-lon'].forEach(id => {
+        ['input-lat', 'input-lon', 'input-alt'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.readOnly = isOn;
         });
@@ -2161,27 +2167,5 @@
      PARCHE EXCEL: incluir hoja de Ángulos Óptimos en la descarga
      Intercepta el botón de descarga para agregar la hoja de ángulos.
 ════════════════════════════════════════════════════════════════════════════ -->
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  // Esperamos a que solar_app.js registre el listener original primero
-  const dlBtn = document.getElementById('btn-download');
-  if (!dlBtn) return;
-
-  // Usamos capture=true para ejecutar ANTES del listener existente y
-  // añadir los datos de ángulos al payload que se enviará al servidor.
-  // El Excel real lo genera app.py; aquí solo garantizamos que
-  // window._optimalAngles esté disponible para solar_app.js si lo usa.
-  // La hoja de ángulos se genera en app.py (ver endpoint /api/download/excel).
-  // Para que el backend reciba los datos, los metemos en sessionStorage
-  // antes de la petición.
-  dlBtn.addEventListener('click', () => {
-    if (window._optimalAngles) {
-      try {
-        sessionStorage.setItem('optimal_angles_data', JSON.stringify(window._optimalAngles));
-      } catch(e) {}
-    }
-  }, true);
-});
-</script>
 </body>
 </html>
