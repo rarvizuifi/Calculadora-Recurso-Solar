@@ -676,81 +676,61 @@
   <div class="section-inner">
     <div class="section-header fade-in">
       <span class="section-tag tag-green">💰 Economía</span>
-      <h2 class="section-title">Tarifas CFE GDMTH y Análisis de Inversión</h2>
+      <h2 class="section-title">Tarifas CFE GDMTO y Análisis de Inversión</h2>
       <p class="section-desc">
-        Define los precios de la tarifa GDMTH por horario, cargos adicionales y parámetros
-        de inversión para calcular el ROI, VPN, TIR y el tiempo de recuperación.
+        Define el precio de la tarifa GDMTO (Gran Demanda Media Tensión Ordinaria) —
+        tarifa plana sin distinción de horario ni temporada, que varía por región CFE.
+        El costo total incluye energía consumida, cargo por demanda máxima mensual y cargo fijo.
       </p>
     </div>
 
     <div class="card card-lg fade-in">
 
-      <!-- Horarios CFE GDMTH -->
-      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">⏰ Horarios y Precios CFE GDMTH (Temporada Normal)</h3>
+      <!-- Precio GDMTO + botón sync CFE -->
+      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">⏰ Precio CFE GDMTO — Tarifa Plana</h3>
       <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.6">
-        <strong style="color:#fbbf24">Base</strong>: 00:00–06:00 h &nbsp;|&nbsp;
-        <strong style="color:#f97316">Intermedio</strong>: 06:00–20:00 h &nbsp;|&nbsp;
-        <strong style="color:#ef4444">Punta</strong>: 20:00–22:00 h <em>(solo lunes a viernes)</em> &nbsp;|&nbsp;
-        22:00–24:00 h → Base
-      </div>
-      <div class="form-grid" style="margin-bottom:1.5rem">
-        <div class="form-group">
-          <label class="form-label" for="precio-base">Tarifa Base <span class="label-unit">[$/kWh MXN]</span></label>
-          <input type="number" class="form-input" id="precio-base" step="0.001" value="1.034" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="precio-intermedio">Tarifa Intermedia <span class="label-unit">[$/kWh MXN]</span></label>
-          <input type="number" class="form-input" id="precio-intermedio" step="0.001" value="1.379" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="precio-punta">Tarifa Punta <span class="label-unit">[$/kWh MXN]</span></label>
-          <input type="number" class="form-input" id="precio-punta" step="0.001" value="3.166" />
-        </div>
+        La tarifa GDMTO tiene un <strong style="color:#fbbf24">precio único por kWh</strong> — sin distinción de hora ni temporada.
+        El cargo varía por división CFE y se actualiza periódicamente.
       </div>
 
-      <!-- Toggle Periodo Especial de Verano -->
-      <div class="toggle-wrap" style="margin-bottom:.75rem">
-        <label class="toggle-switch">
-          <input type="checkbox" id="toggle-verano" checked />
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="toggle-label">🌞 Activar <strong>Periodo Especial de Verano</strong> (1 May – 31 Oct) con tarifas diferenciadas</span>
-      </div>
-      <div id="summer-tariff-panel" style="background:rgba(251,191,36,0.05);border:1px solid rgba(251,191,36,0.2);border-radius:10px;padding:1rem;margin-bottom:1.5rem">
-        <div style="font-size:0.75rem;color:#fbbf24;margin-bottom:.75rem">⚡ Precios de verano (CFE cobra más en May–Oct): Intermedio y Punta más altos</div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label" for="precio-base-v">Base Verano <span class="label-unit">[$/kWh MXN]</span></label>
-            <input type="number" class="form-input" id="precio-base-v" step="0.001" value="1.034" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="precio-intermedio-v">Intermedio Verano <span class="label-unit">[$/kWh MXN]</span></label>
-            <input type="number" class="form-input" id="precio-intermedio-v" step="0.001" value="1.661" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="precio-punta-v">Punta Verano <span class="label-unit">[$/kWh MXN]</span></label>
-            <input type="number" class="form-input" id="precio-punta-v" step="0.001" value="4.126" />
-          </div>
-        </div>
+      <!-- Badge de fuente + botón actualizar -->
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+        <span id="cfe-tariff-source" style="font-size:.8rem;color:#94a3b8;">
+          ⚠️ Valores de referencia — haz clic en "Actualizar" para obtener tarifas en vivo
+        </span>
+        <button onclick="fetchCFETariff()" id="cfe-sync-btn"
+          style="background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.4);color:#f97316;padding:.3rem .8rem;border-radius:8px;font-size:.8rem;cursor:pointer;white-space:nowrap;">
+          🔄 Actualizar tarifas desde CFE
+        </button>
       </div>
 
-      <!-- Cargos Adicionales -->
-      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;">🧾 Cargos Fijos y por Demanda CFE</h3>
+      <!-- Select de división (oculto hasta que el fetch retorne divisiones) -->
+      <div id="cfe-division-wrap" style="display:none;margin-bottom:1rem;">
+        <label class="form-label">División CFE de tu región</label>
+        <select class="form-input" id="cfe-division-select" onchange="applyCFETariff()" style="cursor:pointer"></select>
+      </div>
+
+      <!-- Precios GDMTO -->
       <div class="form-grid" style="margin-bottom:1.5rem">
+        <div class="form-group">
+          <label class="form-label" for="precio-kwh">Precio de Energía <span class="label-unit">[$/kWh MXN]</span></label>
+          <input type="number" class="form-input" id="precio-kwh" step="0.001" value="1.699" />
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Precio único por kWh — sin variación horaria ni estacional</div>
+        </div>
         <div class="form-group">
           <label class="form-label" for="cargo-fijo">Cargo Fijo Mensual <span class="label-unit">[$/mes MXN]</span></label>
-          <input type="number" class="form-input" id="cargo-fijo" step="1" value="58.24" />
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Cargo por usuario CFE independiente del consumo</div>
+          <input type="number" class="form-input" id="cargo-fijo" step="1" value="466.83" />
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Cargo por usuario CFE independiente del consumo</div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="cargo-demanda-punta">Cargo por Demanda Punta <span class="label-unit">[$/kW/mes MXN]</span></label>
-          <input type="number" class="form-input" id="cargo-demanda-punta" step="0.01" value="105.48" />
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Se cobra sobre la demanda máxima registrada en horario punta</div>
+          <label class="form-label" for="cargo-demanda-punta">Cargo por Demanda Máxima <span class="label-unit">[$/kW/mes MXN]</span></label>
+          <input type="number" class="form-input" id="cargo-demanda-punta" step="0.01" value="437.87" />
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Se cobra sobre la demanda máxima del mes (cualquier hora, no solo punta)</div>
         </div>
         <div class="form-group">
           <label class="form-label" for="cargo-respaldo">Cargo por Demanda de Respaldo <span class="label-unit">[$/kW/mes MXN]</span></label>
           <input type="number" class="form-input" id="cargo-respaldo" step="0.01" value="67.23" />
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Aplica sobre la capacidad FV instalada como cargo de respaldo de red</div>
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Aplica sobre la capacidad FV instalada como cargo de respaldo de red</div>
         </div>
         <div class="form-group">
           <label class="form-label" for="factor-respaldo">Factor de Demanda Respaldo <span class="label-unit">[0 – 100 %]</span></label>
@@ -776,7 +756,7 @@
         <div class="form-group">
           <label class="form-label" for="capex-total">CAPEX Total del Sistema <span class="label-unit">[Calculado, MXN]</span></label>
           <input type="number" class="form-input" id="capex-total" readonly style="background:rgba(16,185,129,0.06);color:#10b981;font-weight:700;border:1px solid rgba(16,185,129,0.3)" value="397500" />
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Fórmula: (Precio Panel * Tipo de Cambio * N° Paneles) + Otros Costos</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:.3rem">Fórmula: (Precio Panel × Tipo de Cambio × N° Paneles) + Otros Costos</div>
         </div>
         <div class="form-group">
           <label class="form-label" for="opex-pct">OPEX Anual <span class="label-unit">[% del CAPEX]</span></label>
