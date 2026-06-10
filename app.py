@@ -837,9 +837,9 @@ def api_download_csv():
 def api_cfe_gdmto():
     """Obtiene tarifas GDMTO en vivo desde app.cfe.mx (SSL-broken, usa verify=False)."""
     FALLBACK_DIVISIONES = [
-        {'nombre': 'CDMX / Valle de México (referencia 2025)', 'precio_kwh': 1.699, 'cargo_fijo': 466.83, 'cargo_demanda': 437.87},
-        {'nombre': 'Noroeste (referencia 2025)',                'precio_kwh': 1.821, 'cargo_fijo': 466.83, 'cargo_demanda': 450.12},
-        {'nombre': 'Norte (referencia 2025)',                   'precio_kwh': 1.756, 'cargo_fijo': 466.83, 'cargo_demanda': 442.55},
+        {'nombre': 'CDMX / Valle de México (referencia 2025)', 'precio_kwh': 1.699, 'cargo_fijo': 466.83, 'cargo_dist': 57.74,  'cargo_cap': 334.65, 'cargo_trans': 89.12},
+        {'nombre': 'Noroeste (referencia 2025)',                'precio_kwh': 1.821, 'cargo_fijo': 466.83, 'cargo_dist': 61.20,  'cargo_cap': 350.40, 'cargo_trans': 89.12},
+        {'nombre': 'Norte (referencia 2025)',                   'precio_kwh': 1.756, 'cargo_fijo': 466.83, 'cargo_dist': 59.10,  'cargo_cap': 344.70, 'cargo_trans': 89.12},
     ]
     fecha_hoy = datetime.date.today().isoformat()
 
@@ -891,9 +891,9 @@ def api_cfe_gdmto():
 def api_cfe_gdmto_tarifa():
     """Multi-step WebForms POST para tarifas GDMTO según ubicación y mes/año."""
     FALLBACK_DIVISIONES = [
-        {'nombre': 'CDMX / Valle de México (respaldo 2025)', 'precio_kwh': 1.699, 'cargo_fijo': 466.83, 'cargo_demanda': 437.87},
-        {'nombre': 'Noroeste (respaldo 2025)',                'precio_kwh': 1.821, 'cargo_fijo': 466.83, 'cargo_demanda': 450.12},
-        {'nombre': 'Norte (respaldo 2025)',                   'precio_kwh': 1.756, 'cargo_fijo': 466.83, 'cargo_demanda': 442.55},
+        {'nombre': 'CDMX / Valle de México (respaldo 2025)', 'precio_kwh': 1.699, 'cargo_fijo': 466.83, 'cargo_dist': 57.74,  'cargo_cap': 334.65, 'cargo_trans': 89.12},
+        {'nombre': 'Noroeste (respaldo 2025)',                'precio_kwh': 1.821, 'cargo_fijo': 466.83, 'cargo_dist': 61.20,  'cargo_cap': 350.40, 'cargo_trans': 89.12},
+        {'nombre': 'Norte (respaldo 2025)',                   'precio_kwh': 1.756, 'cargo_fijo': 466.83, 'cargo_dist': 59.10,  'cargo_cap': 344.70, 'cargo_trans': 89.12},
     ]
     fecha_hoy = datetime.date.today().isoformat()
     URL = 'https://app.cfe.mx/Aplicaciones/CCFE/Tarifas/TarifasCRENegocio/Tarifas/GranDemandaMTO.aspx'
@@ -1051,20 +1051,22 @@ def api_cfe_gdmto_tarifa():
             v = float(m.group(1).replace(',', ''))
             return v if min_val < v <= max_val else None
 
-        fijo_val = _val_after(full_text, 'FIJO',      min_val=50)
-        kwh_val  = _val_after(full_text, 'VARIABLE',  max_val=20) or \
-                   _val_after(full_text, 'ENERG',     max_val=20)
-        dist_val = _val_after(full_text, 'DISTRIBUCI', min_val=1)
-        cap_val  = _val_after(full_text, 'CAPACIDAD',  min_val=1)
+        fijo_val  = _val_after(full_text, 'FIJO',       min_val=50)
+        kwh_val   = _val_after(full_text, 'VARIABLE',   max_val=20) or \
+                    _val_after(full_text, 'ENERG',      max_val=20)
+        dist_val  = _val_after(full_text, 'DISTRIBUCI', min_val=1)
+        cap_val   = _val_after(full_text, 'CAPACIDAD',  min_val=1)
+        trans_val = _val_after(full_text, 'TRANSMISI',  min_val=1)
 
-        cargo_demanda_total = (dist_val or 0) + (cap_val or 0)
         divisiones = []
         if kwh_val is not None:
             divisiones = [{
-                'nombre':       division_nombre,
-                'precio_kwh':   kwh_val,
-                'cargo_fijo':   fijo_val if fijo_val is not None else FALLBACK_DIVISIONES[0]['cargo_fijo'],
-                'cargo_demanda': cargo_demanda_total if cargo_demanda_total > 1 else FALLBACK_DIVISIONES[0]['cargo_demanda'],
+                'nombre':      division_nombre,
+                'precio_kwh':  kwh_val,
+                'cargo_fijo':  fijo_val  if fijo_val  is not None else FALLBACK_DIVISIONES[0]['cargo_fijo'],
+                'cargo_dist':  dist_val  if dist_val  is not None else FALLBACK_DIVISIONES[0]['cargo_dist'],
+                'cargo_cap':   cap_val   if cap_val   is not None else FALLBACK_DIVISIONES[0]['cargo_cap'],
+                'cargo_trans': trans_val if trans_val is not None else None,
             }]
 
         if not divisiones:

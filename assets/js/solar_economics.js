@@ -8,7 +8,7 @@
 // CALCULADORA DE FACTURA CFE GDMTO (tarifa plana — sin distinción horaria)
 // ─────────────────────────────────────────────────────────────────────────────
 function calcularFacturaCFEGDMTO(demandArr, genArr, solarStats, params) {
-  const { precio_kwh, cargo_fijo_mensual, cargo_demanda_punta, cargo_respaldo, factor_respaldo } = params;
+  const { precio_kwh, cargo_fijo_mensual, cargo_demanda } = params;
   const days_in_month = [31,28,31,30,31,30,31,31,30,31,30,31];
 
   let total_e_sin = 0, total_e_con = 0;
@@ -37,22 +37,19 @@ function calcularFacturaCFEGDMTO(demandArr, genArr, solarStats, params) {
 
   let dem_charge_sin = 0, dem_charge_con = 0;
   for (let m = 0; m < 12; m++) {
-    dem_charge_sin += monthly_max_sin[m] * cargo_demanda_punta;
-    dem_charge_con += monthly_max_con[m] * cargo_demanda_punta;
+    dem_charge_sin += monthly_max_sin[m] * cargo_demanda;
+    dem_charge_con += monthly_max_con[m] * cargo_demanda;
   }
 
-  const p_kw          = solarStats ? solarStats.p_nominal_total_kW : 0;
-  const backup_annual = p_kw * factor_respaldo * cargo_respaldo * 12;
-
   const factura_sin = energy_cost_sin + dem_charge_sin + fixed_annual;
-  const factura_con = energy_cost_con + dem_charge_con + fixed_annual + backup_annual;
+  const factura_con = energy_cost_con + dem_charge_con + fixed_annual;
   const ahorro      = factura_sin - factura_con;
 
   return {
     factura_sin, factura_con, ahorro,
     energy_cost_sin, energy_cost_con,
     dem_charge_sin, dem_charge_con,
-    fixed_annual, backup_annual,
+    fixed_annual,
     total_e_sin, total_e_con,
   };
 }
@@ -163,11 +160,11 @@ function readEconomicParams() {
   if (capexInput) capexInput.value = Math.round(capex);
 
   return {
-    precio_kwh:          g('precio-kwh')          || 1.699,
-    cargo_fijo_mensual:  g('cargo-fijo')           || 466.83,
-    cargo_demanda_punta: g('cargo-demanda-punta')  || 437.87,
-    cargo_respaldo:      g('cargo-respaldo')       || 67.23,
-    factor_respaldo:     g('factor-respaldo')      || 0.5,
+    precio_kwh:         g('precio-kwh')           || 1.699,
+    cargo_fijo_mensual: g('cargo-fijo')            || 466.83,
+    cargo_demanda:      (g('cargo-distribucion') || 57.74) +
+                        (g('cargo-capacidad')    || 334.65) +
+                        (g('cargo-transmision')  || 89.12),
     capex,
     opex_pct:            g('opex-pct')             || 0.015,
     vida_util:           Math.round(g('vida-util'))|| 25,
@@ -231,7 +228,7 @@ function renderEconomicResults(factura, roi, params) {
         `${fm(factura.total_e_sin,0)} kWh`, `${fm(factura.total_e_con,0)} kWh`,
         fmMXN(factura.energy_cost_sin,0),    fmMXN(factura.energy_cost_con,0),
         fmMXN(factura.energy_cost_sin - factura.energy_cost_con, 0), '#10b981'],
-      ['📈 Cargo por Demanda Máxima',
+      ['📈 Cargo por Demanda (Dist+Cap+Trans)',
         '—', '—',
         fmMXN(factura.dem_charge_sin,0), fmMXN(factura.dem_charge_con,0),
         fmMXN(factura.dem_charge_sin - factura.dem_charge_con, 0), '#10b981'],
@@ -239,10 +236,6 @@ function renderEconomicResults(factura, roi, params) {
         '—', '—',
         fmMXN(factura.fixed_annual,0), fmMXN(factura.fixed_annual,0),
         '$0 MXN', '#64748b'],
-      ['🔌 Cargo Respaldo Solar',
-        '—', '—',
-        '—', fmMXN(factura.backup_annual,0),
-        `<span style="color:#ef4444">-${fmMXN(factura.backup_annual,0)}</span>`, '#64748b'],
     ].map(([label, ks, kc, cs, cc, ahorro_fila, color]) => `<tr>
       ${td(label)}${td(ks)}${td(kc)}${td(cs)}${td(cc)}
       ${td(`<strong style="color:${color}">${ahorro_fila}</strong>`)}
@@ -540,7 +533,9 @@ function applyCFETariff() {
   if (!div) return;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-  set('precio-kwh',          div.precio_kwh.toFixed(4));
-  set('cargo-fijo',          div.cargo_fijo.toFixed(2));
-  set('cargo-demanda-punta', div.cargo_demanda.toFixed(2));
+  set('precio-kwh',       div.precio_kwh.toFixed(4));
+  set('cargo-fijo',       div.cargo_fijo.toFixed(2));
+  if (div.cargo_dist != null) set('cargo-distribucion', div.cargo_dist.toFixed(2));
+  if (div.cargo_cap  != null) set('cargo-capacidad',    div.cargo_cap.toFixed(2));
+  if (div.cargo_trans != null) set('cargo-transmision', div.cargo_trans.toFixed(2));
 }

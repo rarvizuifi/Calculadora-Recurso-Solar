@@ -795,20 +795,23 @@
           <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Cargo por usuario CFE independiente del consumo</div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="cargo-demanda-punta">Cargo por Demanda Máxima <span class="label-unit">[$/kW/mes MXN]</span></label>
-          <input type="number" class="form-input" id="cargo-demanda-punta" step="0.01" value="437.87" />
-          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Se cobra sobre la demanda máxima del mes (cualquier hora, no solo punta)</div>
+          <label class="form-label" for="cargo-distribucion">Cargo por Distribución <span class="label-unit">[$/kW/mes MXN]</span></label>
+          <input type="number" class="form-input" id="cargo-distribucion" step="0.01" value="57.74" />
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Red de distribución MT — aplicado sobre la demanda máxima registrada en el mes</div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="cargo-respaldo">Cargo por Demanda de Respaldo <span class="label-unit">[$/kW/mes MXN]</span></label>
-          <input type="number" class="form-input" id="cargo-respaldo" step="0.01" value="67.23" />
-          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Aplica sobre la capacidad FV instalada como cargo de respaldo de red</div>
+          <label class="form-label" for="cargo-capacidad">Cargo por Capacidad <span class="label-unit">[$/kW/mes MXN]</span></label>
+          <input type="number" class="form-input" id="cargo-capacidad" step="0.01" value="334.65" />
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Reserva de capacidad de generación — aplicado sobre la demanda máxima del mes</div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="factor-respaldo">Factor de Demanda Respaldo <span class="label-unit">[0 – 100 %]</span></label>
-          <input type="range" class="form-range" id="factor-respaldo" min="0" max="1" step="0.05" value="0.50" />
-          <div class="range-value" id="factor-respaldo-val">50%</div>
+          <label class="form-label" for="cargo-transmision">Cargo por Transmisión <span class="label-unit">[$/kW/mes MXN]</span></label>
+          <input type="number" class="form-input" id="cargo-transmision" step="0.01" value="89.12" />
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Red de transmisión — aplicado sobre la demanda máxima. No publicado en app.cfe.mx; tómalo de tu recibo CFE.</div>
         </div>
+      </div>
+      <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6;padding:.5rem .75rem;border-left:2px solid rgba(249,115,22,0.3)">
+        ℹ️ Los cargos CENACE y SCnMEM que aparecen en el recibo físico no están incluidos en este modelo (impacto conjunto &lt; 1% de la factura total).
       </div>
 
       <!-- Análisis de Inversión -->
