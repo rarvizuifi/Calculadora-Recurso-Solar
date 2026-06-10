@@ -304,15 +304,6 @@ function initSliders() {
     });
   });
 
-  // Toggle verano panel
-  const toggleVerano = $('toggle-verano');
-  const summerPanel  = $('summer-tariff-panel');
-  if (toggleVerano && summerPanel) {
-    const updateToggle = () => { summerPanel.style.display = toggleVerano.checked ? '' : 'none'; };
-    toggleVerano.addEventListener('change', updateToggle);
-    updateToggle();
-  }
-
   // Toggle Climático
   const toggleThermal = $('toggle-thermal');
   const thermalPanel = $('thermal-panel');
@@ -1771,17 +1762,11 @@ function downloadExcel() {
           ['Tasa de Descuento (WACC)', ec.wacc * 100, '% nominal'],
           ['Tasa de Inflación Tarifaria', ec.inflacion * 100, '% anual'],
           ['Tipo de Cambio Utilizado', ec.usd_mxn, 'MXN/USD'],
-          ['CFE Cargo Fijo Mensual', ec.cargo_fijo_mensual, 'MXN/mes'],
-          ['CFE Demanda de Punta', ec.cargo_demanda_punta, 'MXN/kW-mes'],
-          ['CFE Cargo por Respaldo', ec.cargo_respaldo, 'MXN/kW-mes'],
           ['CFE Factor de Respaldo Contratado', ec.factor_respaldo * 100, '% de la demanda contratada'],
-          ['CFE Precio Base Estándar', ec.precio_base, 'MXN/kWh'],
-          ['CFE Precio Intermedio Estándar', ec.precio_intermedio, 'MXN/kWh'],
-          ['CFE Precio Punta Estándar', ec.precio_punta, 'MXN/kWh'],
-          ['CFE Precio Base Verano', ec.precio_base_v, 'MXN/kWh'],
-          ['CFE Precio Intermedio Verano', ec.precio_intermedio_v, 'MXN/kWh'],
-          ['CFE Precio Punta Verano', ec.precio_punta_v, 'MXN/kWh'],
-          ['Aplicar Tarifas Estacionales de Verano', ec.use_summer_tariff ? 'Sí' : 'No', '—'],
+          ['CFE Precio Energía GDMTO', ec.precio_kwh, 'MXN/kWh'],
+          ['CFE Cargo Fijo Mensual', ec.cargo_fijo_mensual, 'MXN/mes'],
+          ['CFE Cargo por Demanda Máxima', ec.cargo_demanda_punta, 'MXN/kW/mes'],
+          ['CFE Cargo Respaldo Solar', ec.cargo_respaldo, 'MXN/kW/mes'],
           ['Costo Energía No Suministrada (ENS)', ec.outage_cost_ens, 'MXN/kWh'],
           ['Costo Fijo por Apagón', ec.outage_cost_fix, 'MXN/evento'],
           ['Costo por Mantenimiento', ec.merma_maint_cost, 'MXN/evento'],
@@ -1842,8 +1827,8 @@ function downloadExcel() {
             ['Humedad Relativa Verano', parseFloat($('hum-verano').value), '%'],
             ['Humedad Relativa Invierno', parseFloat($('hum-invierno').value), '%'],
             ['Velocidad del Viento', parseFloat($('viento-vel').value), 'm/s'],
-            ['Coeficiente de Temperatura del Panel (γ)', parseFloat($('coef-temp-panel').value), '%/°C'],
-            ['Temperatura Nominal de Operación (NOCT)', parseFloat($('noct-panel').value), '°C'],
+            ['Coeficiente de Temperatura del Panel (χ)', parseFloat($('chi-panel').value), '%/°C'],
+            ['Temperatura Nominal de Operación (NOCT)', parseFloat($('input-NOCT').value), '°C'],
           ];
           thermParams.forEach((p, idx) => {
             const isEven = idx % 2 === 0;
