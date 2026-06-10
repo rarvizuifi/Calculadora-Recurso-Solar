@@ -1034,25 +1034,41 @@ def api_cfe_gdmto_tarifa():
         s4 = BeautifulSoup(r4.text, 'html.parser')
 
         # ── Parse tariff table ───────────────────────────────────────────
-        money_re = re.compile(r'\$?\s*(\d{1,6}(?:,\d{3})*(?:\.\d+)?)')
+        # CFE GDMTO table format: one row per charge type (Fijo / Variable / Distribución / Capacidad)
+        # Each row's last cell holds the numeric value for that period.
+        num_re = re.compile(r'(\d{1,6}(?:,\d{3})*\.?\d*)')
+        fijo_val = None
+        kwh_val  = None
+        dist_val = None
+        cap_val  = None
+
+        for row in s4.find_all('tr'):
+            cells = row.find_all(['td', 'th'])
+            if not cells:
+                continue
+            row_text = ' '.join(c.get_text(strip=True) for c in cells).upper()
+            nums = [float(n.replace(',', '')) for n in num_re.findall(row_text) if float(n.replace(',', '')) > 0]
+            if not nums:
+                continue
+            last = nums[-1]
+            if 'FIJO' in row_text and fijo_val is None and last > 50:
+                fijo_val = last
+            elif ('VARIABLE' in row_text or 'ENERG' in row_text) and 'FIJO' not in row_text and kwh_val is None and last < 20:
+                kwh_val = last
+            elif 'DISTRIBUCI' in row_text and dist_val is None and last > 1:
+                dist_val = last
+            elif 'CAPACIDAD' in row_text and cap_val is None and last > 1:
+                cap_val = last
+
+        cargo_demanda_total = (dist_val or 0) + (cap_val or 0)
         divisiones = []
-        for table in s4.find_all('table'):
-            for row in table.find_all('tr'):
-                cells = row.find_all(['td', 'th'])
-                if len(cells) < 3:
-                    continue
-                row_text = ' '.join(c.get_text(strip=True) for c in cells)
-                nums_raw = money_re.findall(row_text)
-                nums = [float(n.replace(',', '')) for n in nums_raw if float(n.replace(',', '')) > 0.01]
-                if len(nums) < 2:
-                    continue
-                nombre = cells[0].get_text(strip=True)
-                if not nombre or _norm(nombre) in ('CONCEPTO', 'DIVISION', 'REGION'):
-                    continue
-                cargo_fijo    = nums[0]
-                precio_kwh    = nums[1] if len(nums) > 1 else FALLBACK_DIVISIONES[0]['precio_kwh']
-                cargo_demanda = (nums[2] + nums[3]) if len(nums) > 3 else (nums[2] if len(nums) > 2 else FALLBACK_DIVISIONES[0]['cargo_demanda'])
-                divisiones.append({'nombre': nombre, 'precio_kwh': precio_kwh, 'cargo_fijo': cargo_fijo, 'cargo_demanda': cargo_demanda})
+        if kwh_val is not None:
+            divisiones = [{
+                'nombre':       division_nombre,
+                'precio_kwh':   kwh_val,
+                'cargo_fijo':   fijo_val if fijo_val is not None else FALLBACK_DIVISIONES[0]['cargo_fijo'],
+                'cargo_demanda': cargo_demanda_total if cargo_demanda_total > 1 else FALLBACK_DIVISIONES[0]['cargo_demanda'],
+            }]
 
         if not divisiones:
             return jsonify({'ok': True, 'divisiones': FALLBACK_DIVISIONES, 'fuente': 'fallback', 'fecha': fecha_hoy})
