@@ -686,6 +686,78 @@
 
     <div class="card card-lg fade-in">
 
+      <!-- ── Ubicación para Consulta de Tarifas CFE ─────────────────────── -->
+      <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">📍 Ubicación para Consulta de Tarifas CFE</h3>
+      <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.6">
+        Ingresa o detecta tu ubicación para consultar la División CFE correspondiente y obtener las tarifas GDMTO actualizadas automáticamente.
+      </div>
+
+      <!-- Buscador de dirección CFE -->
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label class="form-label" for="cfe-address-search">
+          🔎 Buscar dirección o ciudad <span class="label-unit">[autocompletado por Google]</span>
+        </label>
+        <input type="text" class="form-input" id="cfe-address-search"
+               placeholder="Ej: Monterrey, Nuevo León" autocomplete="off" />
+        <div id="cfe-address-status" class="geo-status"></div>
+      </div>
+
+      <!-- GPS CFE -->
+      <div class="geo-btn-row">
+        <button class="geo-locate-btn" id="btn-cfe-geolocate" type="button">
+          <span>📡</span> Usar mi ubicación actual (GPS)
+        </button>
+        <div><div class="geo-status" id="cfe-geo-status"></div></div>
+      </div>
+
+      <!-- Lat / Lon CFE -->
+      <div class="form-grid" style="margin-bottom:1.5rem;">
+        <div class="form-group">
+          <label class="form-label" for="cfe-lat">Latitud <span class="label-unit">[° N positivo]</span></label>
+          <input type="number" class="form-input" id="cfe-lat" step="0.0001" value="25.6700" placeholder="Ej: 25.6700" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cfe-lon">Longitud <span class="label-unit">[° E positivo / O negativo]</span></label>
+          <input type="number" class="form-input" id="cfe-lon" step="0.0001" value="-100.3100" placeholder="Ej: -100.3100" />
+        </div>
+      </div>
+
+      <!-- Año y Mes de la tarifa -->
+      <div class="form-grid" style="margin-bottom:1.5rem;">
+        <div class="form-group">
+          <label class="form-label" for="cfe-anio">Año de la Tarifa</label>
+          <select class="form-input" id="cfe-anio" style="cursor:pointer">
+            <option value="2026" selected>2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+            <option value="2023">2023</option>
+            <option value="2022">2022</option>
+            <option value="2021">2021</option>
+            <option value="2020">2020</option>
+            <option value="2019">2019</option>
+            <option value="2018">2018</option>
+            <option value="2017">2017</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cfe-mes">Mes de la Tarifa</label>
+          <select class="form-input" id="cfe-mes" style="cursor:pointer">
+            <option value="1">Enero</option>
+            <option value="2">Febrero</option>
+            <option value="3">Marzo</option>
+            <option value="4">Abril</option>
+            <option value="5">Mayo</option>
+            <option value="6" selected>Junio</option>
+            <option value="7">Julio</option>
+            <option value="8">Agosto</option>
+            <option value="9">Septiembre</option>
+            <option value="10">Octubre</option>
+            <option value="11">Noviembre</option>
+            <option value="12">Diciembre</option>
+          </select>
+        </div>
+      </div>
+
       <!-- Precio GDMTO + botón sync CFE -->
       <h3 style="font-size:.85rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">⏰ Precio CFE GDMTO — Tarifa Plana</h3>
       <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.6">
@@ -815,6 +887,18 @@
         📍 Geolocalización del Sitio
       </h3>
 
+      <!-- Toggle: usar misma ubicación que CFE -->
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-use-cfe-location" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <span style="font-size:.875rem;color:var(--text-secondary);">Usar misma ubicación que la de Tarifas CFE GDMTO</span>
+      </div>
+
+      <!-- Picker de ubicación (oculto cuando toggle=ON) -->
+      <div id="solar-location-picker" style="display:none">
+
       <!-- Buscador de dirección con Google Places -->
       <div class="form-group" style="margin-bottom: 1rem;">
         <label class="form-label" for="address-search">
@@ -834,6 +918,8 @@
           <div class="geo-status" id="geo-status"></div>
         </div>
       </div>
+
+      </div><!-- end #solar-location-picker -->
 
       <div class="form-grid" style="margin-bottom:1.75rem">
         <div class="form-group">
