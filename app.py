@@ -1034,31 +1034,28 @@ def api_cfe_gdmto_tarifa():
         s4 = BeautifulSoup(r4.text, 'html.parser')
 
         # ── Parse tariff table ───────────────────────────────────────────
-        # CFE GDMTO table format: one row per charge type (Fijo / Variable / Distribución / Capacidad)
-        # Each row's last cell holds the numeric value for that period.
-        num_re = re.compile(r'(\d{1,6}(?:,\d{3})*\.?\d*)')
-        fijo_val = None
-        kwh_val  = None
-        dist_val = None
-        cap_val  = None
+        # CFE GDMTO has 4 charges: Fijo ($/mes), Variable/Energía ($/kWh),
+        # Distribución ($/kW), Capacidad ($/kW).  They may appear in the same
+        # row or in separate rows — so we search for each keyword and take the
+        # first number that follows it in the text (within 80 chars).
+        full_text = ' '.join(s4.stripped_strings).upper()
 
-        for row in s4.find_all('tr'):
-            cells = row.find_all(['td', 'th'])
-            if not cells:
-                continue
-            row_text = ' '.join(c.get_text(strip=True) for c in cells).upper()
-            nums = [float(n.replace(',', '')) for n in num_re.findall(row_text) if float(n.replace(',', '')) > 0]
-            if not nums:
-                continue
-            last = nums[-1]
-            if 'FIJO' in row_text and fijo_val is None and last > 50:
-                fijo_val = last
-            elif ('VARIABLE' in row_text or 'ENERG' in row_text) and 'FIJO' not in row_text and kwh_val is None and last < 20:
-                kwh_val = last
-            elif 'DISTRIBUCI' in row_text and dist_val is None and last > 1:
-                dist_val = last
-            elif 'CAPACIDAD' in row_text and cap_val is None and last > 1:
-                cap_val = last
+        def _val_after(text, keyword, min_val=0.0, max_val=1e9, window=80):
+            idx = text.find(keyword)
+            if idx == -1:
+                return None
+            segment = text[idx + len(keyword): idx + len(keyword) + window]
+            m = re.search(r'(\d[\d,]*\.?\d*)', segment)
+            if not m:
+                return None
+            v = float(m.group(1).replace(',', ''))
+            return v if min_val < v <= max_val else None
+
+        fijo_val = _val_after(full_text, 'FIJO',      min_val=50)
+        kwh_val  = _val_after(full_text, 'VARIABLE',  max_val=20) or \
+                   _val_after(full_text, 'ENERG',     max_val=20)
+        dist_val = _val_after(full_text, 'DISTRIBUCI', min_val=1)
+        cap_val  = _val_after(full_text, 'CAPACIDAD',  min_val=1)
 
         cargo_demanda_total = (dist_val or 0) + (cap_val or 0)
         divisiones = []
