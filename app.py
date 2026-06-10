@@ -19,13 +19,19 @@ Endpoints:
 """
 
 import io
+import re
 import math
 import datetime
 import traceback
 import numpy as np
 import pandas as pd
+import requests
+import urllib3
+from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from demand_profile import generate_demand_profile, PLANT_PROFILES
 from solar_engine import run_solar_engine, get_climate_cities
@@ -829,10 +835,6 @@ def api_download_csv():
 @app.route('/api/cfe_gdmto', methods=['GET'])
 def api_cfe_gdmto():
     """Obtiene tarifas GDMTO en vivo desde app.cfe.mx (SSL-broken, usa verify=False)."""
-    import re
-    import requests
-    from bs4 import BeautifulSoup
-
     FALLBACK_DIVISIONES = [
         {'nombre': 'CDMX / Valle de México (referencia 2025)', 'precio_kwh': 1.699, 'cargo_fijo': 466.83, 'cargo_demanda': 437.87},
         {'nombre': 'Noroeste (referencia 2025)',                'precio_kwh': 1.821, 'cargo_fijo': 466.83, 'cargo_demanda': 450.12},
@@ -843,7 +845,6 @@ def api_cfe_gdmto():
     URL = "https://app.cfe.mx/Aplicaciones/CCFE/Tarifas/TarifasCRENegocio/Tarifas/GranDemandaMTO.aspx"
 
     try:
-        requests.packages.urllib3.disable_warnings()
         r = requests.get(
             URL, verify=False, timeout=12,
             headers={'User-Agent': 'Mozilla/5.0 (compatible; SolarCalc/2.2)'}
@@ -866,8 +867,10 @@ def api_cfe_gdmto():
                 if len(nums) < 2:
                     continue
                 nombre = cells[0].get_text(strip=True)
-                if not nombre or nombre.lower() in ('concepto', 'división', 'region'):
+                if not nombre or nombre.lower() in ('concepto', 'división', 'division', 'region', 'región'):
                     continue
+                # Columnas esperadas CFE GDMTO: [0] cargo_fijo | [1] precio_kwh | [2] cargo_dist | [3] cargo_cap
+                # Si la página cambia de estructura el fallback entra automáticamente (divisiones queda vacío).
                 cargo_fijo    = nums[0] if len(nums) > 0 else FALLBACK_DIVISIONES[0]['cargo_fijo']
                 precio_kwh    = nums[1] if len(nums) > 1 else FALLBACK_DIVISIONES[0]['precio_kwh']
                 cargo_demanda = (nums[2] + nums[3]) if len(nums) > 3 else (nums[2] if len(nums) > 2 else FALLBACK_DIVISIONES[0]['cargo_demanda'])
