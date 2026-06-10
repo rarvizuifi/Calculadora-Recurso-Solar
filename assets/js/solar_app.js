@@ -1266,7 +1266,7 @@ async function runSolar() {
       renderSolarKPIs(data.stats, data.balance);
       renderSolarStats(data.stats, data.balance);
 
-      // Análisis económico (CFE GDMTH + ROI/VPN/TIR + gráfica inversión)
+      // Análisis económico (CFE GDMTO + ROI/VPN/TIR + gráfica inversión)
       if (typeof runEconomics === 'function') runEconomics();
 
       const solRes = $('solar-results');
@@ -1276,7 +1276,7 @@ async function runSolar() {
         solRes.querySelectorAll('.fade-in').forEach(el => el.classList.add('visible'));
       }, 50);
       solRes.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      showAlert('solar-alert', 'success', 'Cálculo completado — Motor Jensen · Análisis CFE GDMTH · ROI calculado.');
+      showAlert('solar-alert', 'success', 'Cálculo completado — Motor Jensen · Análisis CFE GDMTO · ROI calculado.');
     } catch (e) {
       showAlert('solar-alert', 'error', `Error en el cálculo: ${e.message}`);
       console.error(e);
@@ -2159,7 +2159,7 @@ function downloadExcel() {
       workbook.xlsx.writeBuffer().then((buffer) => {
         saveAs(
           new Blob([buffer], { type: 'application/octet-stream' }),
-          'Reporte_Simulacion_FV_Jensen_GDMTH.xlsx'
+          'Reporte_Simulacion_FV_Jensen_GDMTO.xlsx'
         );
       }).catch((err) => {
         alert(`Error al escribir Excel: ${err.message}`);

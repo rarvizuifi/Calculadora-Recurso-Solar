@@ -826,6 +826,63 @@ def api_download_csv():
     return api_download_excel()
 
 
+@app.route('/api/cfe_gdmto', methods=['GET'])
+def api_cfe_gdmto():
+    """Obtiene tarifas GDMTO en vivo desde app.cfe.mx (SSL-broken, usa verify=False)."""
+    import re
+    import requests
+    from bs4 import BeautifulSoup
+
+    FALLBACK_DIVISIONES = [
+        {'nombre': 'CDMX / Valle de México (referencia 2025)', 'precio_kwh': 1.699, 'cargo_fijo': 466.83, 'cargo_demanda': 437.87},
+        {'nombre': 'Noroeste (referencia 2025)',                'precio_kwh': 1.821, 'cargo_fijo': 466.83, 'cargo_demanda': 450.12},
+        {'nombre': 'Norte (referencia 2025)',                   'precio_kwh': 1.756, 'cargo_fijo': 466.83, 'cargo_demanda': 442.55},
+    ]
+    fecha_hoy = datetime.date.today().isoformat()
+
+    URL = "https://app.cfe.mx/Aplicaciones/CCFE/Tarifas/TarifasCRENegocio/Tarifas/GranDemandaMTO.aspx"
+
+    try:
+        requests.packages.urllib3.disable_warnings()
+        r = requests.get(
+            URL, verify=False, timeout=12,
+            headers={'User-Agent': 'Mozilla/5.0 (compatible; SolarCalc/2.2)'}
+        )
+        r.raise_for_status()
+        r.encoding = r.apparent_encoding or 'utf-8'
+        soup = BeautifulSoup(r.text, 'html.parser')
+
+        money_re = re.compile(r'\$?\s*(\d{1,6}(?:,\d{3})*(?:\.\d+)?)')
+        divisiones = []
+
+        for table in soup.find_all('table'):
+            for row in table.find_all('tr'):
+                cells = row.find_all(['td', 'th'])
+                if len(cells) < 3:
+                    continue
+                row_text = ' '.join(c.get_text(strip=True) for c in cells)
+                nums_raw = money_re.findall(row_text)
+                nums = [float(n.replace(',', '')) for n in nums_raw if float(n.replace(',', '')) > 0.01]
+                if len(nums) < 2:
+                    continue
+                nombre = cells[0].get_text(strip=True)
+                if not nombre or nombre.lower() in ('concepto', 'división', 'region'):
+                    continue
+                cargo_fijo    = nums[0] if len(nums) > 0 else FALLBACK_DIVISIONES[0]['cargo_fijo']
+                precio_kwh    = nums[1] if len(nums) > 1 else FALLBACK_DIVISIONES[0]['precio_kwh']
+                cargo_demanda = (nums[2] + nums[3]) if len(nums) > 3 else (nums[2] if len(nums) > 2 else FALLBACK_DIVISIONES[0]['cargo_demanda'])
+                divisiones.append({'nombre': nombre, 'precio_kwh': precio_kwh, 'cargo_fijo': cargo_fijo, 'cargo_demanda': cargo_demanda})
+
+        if not divisiones:
+            return jsonify({'ok': True, 'divisiones': FALLBACK_DIVISIONES, 'fuente': 'fallback', 'fecha': fecha_hoy})
+
+        return jsonify({'ok': True, 'divisiones': divisiones, 'fuente': URL, 'fecha': fecha_hoy})
+
+    except Exception as e:
+        return jsonify({'ok': True, 'divisiones': FALLBACK_DIVISIONES, 'fuente': 'fallback',
+                        'error_detail': str(e), 'fecha': fecha_hoy})
+
+
 if __name__ == '__main__':
     print("=" * 60)
     print("  Motor Solar Fotovoltaico v2.1 — Servidor Flask")
