@@ -249,7 +249,7 @@
       transition: width .6s cubic-bezier(.4,0,.2,1);
     }
   </style>
-  <script async defer
+  <script defer
   src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDIO9AKyM4TeZJ2O2uLbgPETJapKZLo_d4&libraries=places&callback=initGoogleMaps">
   </script>
 </head>
@@ -805,9 +805,20 @@
           <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Reserva de capacidad de generación — aplicado sobre la demanda máxima del mes</div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="cargo-transmision">Cargo por Transmisión <span class="label-unit">[$/kW/mes MXN]</span></label>
-          <input type="number" class="form-input" id="cargo-transmision" step="0.01" value="89.12" />
-          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Red de transmisión — aplicado sobre la demanda máxima. No publicado en app.cfe.mx; tómalo de tu recibo CFE.</div>
+          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem;">
+            <label class="form-label" style="margin:0" for="cargo-transmision">Cargo por Transmisión <span class="label-unit">[$/kW/mes MXN]</span></label>
+            <label class="toggle-switch" style="flex-shrink:0">
+              <input type="checkbox" id="toggle-transmision" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div id="transmision-field-wrap" style="display:none">
+            <input type="number" class="form-input" id="cargo-transmision" step="0.01" value="89.12" />
+            <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">Red de transmisión — aplicado sobre la demanda máxima. No publicado en app.cfe.mx; tómalo de tu recibo CFE.</div>
+          </div>
+          <div id="transmision-default-note" style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem">
+            Usando valor por defecto: 89.12 $/kW/mes — activa el toggle para editar manualmente.
+          </div>
         </div>
       </div>
       <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6;padding:.5rem .75rem;border-left:2px solid rgba(249,115,22,0.3)">
@@ -2067,6 +2078,18 @@
           },
           { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
         );
+      });
+    }
+
+    // ── Toggle: Cargo por Transmisión ──────────────────────────────────
+    const toggleTrans = document.getElementById('toggle-transmision');
+    if (toggleTrans) {
+      toggleTrans.addEventListener('change', () => {
+        const on = toggleTrans.checked;
+        const wrap = document.getElementById('transmision-field-wrap');
+        const note = document.getElementById('transmision-default-note');
+        if (wrap) wrap.style.display = on ? '' : 'none';
+        if (note) note.style.display = on ? 'none' : '';
       });
     }
 

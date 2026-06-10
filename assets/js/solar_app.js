@@ -239,7 +239,6 @@ function initSliders() {
     { slider: 'rain-days',        display: 'rain-days-val',        suffix: ' días', multiplier: 1,   decimals: 0 },
     { slider: 'soiling-loss-pct', display: 'soiling-loss-pct-val', suffix: '%',     multiplier: 100, decimals: 0 },
     { slider: 'panel-price-usd',  display: 'panel-price-usd-val',  suffix: ' USD',  multiplier: 1,   decimals: 0, prefix: '$' },
-    { slider: 'factor-respaldo',  display: 'factor-respaldo-val',  suffix: '%',     multiplier: 100, decimals: 0 },
     { slider: 'opex-pct',         display: 'opex-pct-val',         suffix: '%',     multiplier: 100, decimals: 1 },
     { slider: 'degradacion-pct',  display: 'degradacion-pct-val',  suffix: '%',     multiplier: 100, decimals: 1 },
     { slider: 'wacc',             display: 'wacc-val',             suffix: '%',     multiplier: 100, decimals: 1 },
