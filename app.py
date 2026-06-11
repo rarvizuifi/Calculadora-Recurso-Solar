@@ -263,7 +263,7 @@ def api_cfe_gdmto_tarifa():
             'cargo_fijo':  fijo_val  if fijo_val  is not None else FALLBACK_DIVISIONES[0]['cargo_fijo'],
             'cargo_dist':  dist_val  if dist_val  is not None else FALLBACK_DIVISIONES[0]['cargo_dist'],
             'cargo_cap':   cap_val   if cap_val   is not None else FALLBACK_DIVISIONES[0]['cargo_cap'],
-            'cargo_trans': trans_val,
+            'cargo_trans': trans_val if trans_val is not None else FALLBACK_DIVISIONES[0]['cargo_trans'],
         }]
 
         return jsonify({'ok': True, 'divisiones': divisiones, 'fuente': CFE_URL,

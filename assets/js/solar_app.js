@@ -728,9 +728,11 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
   const azimuth_r = azimuth * DEG;
 
   const alt_factor = Math.exp(-alt / 8500.0);
-  // Meridiano estándar de la zona horaria: redondear lon al múltiplo de 15° más cercano
-  // Esto corrige el desfase horario solar: Monterrey lon=-100.31° → zona CST (UTC-6) → lon_ref=-90°
-  const lon_ref_deg = Math.round(lon / 15.0) * 15.0;
+  // Meridiano estándar de la zona horaria: lon_ref = utc_offset × 15°
+  // Usar el campo UTC offset del formulario; las fronteras de zonas horarias no siguen
+  // meridianos geográficos, así que redondear lon/15 es incorrecto para México central.
+  const utc_offset = parseFloat(document.getElementById('input-utc-offset')?.value ?? -6) || -6;
+  const lon_ref_deg = utc_offset * 15.0;
   const lon_ref_rad = lon_ref_deg * DEG;
 
   const N = 35040;
@@ -744,6 +746,10 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
   const T_STC      = 25.0;
   const T_NOCT_AMB = 20.0;
   const G_NOCT     = 800.0;
+
+  // Acumuladores para pérdida térmica ponderada por irradiancia
+  let sum_thermal_loss_x_gtot = 0.0;
+  let sum_gtot_pos = 0.0;
 
   let idx = 0;
   for (let month_idx = 0; month_idx < 12; month_idx++) {
@@ -802,6 +808,12 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
         if (thermalParams && Gtot > 0) {
           // Faiman extendido (corrige T_cell por humedad y viento)
           T_cell = T_amb + (Gtot / 800.0) * (noct - 20.0) * (1.0 - 0.003 * RH) * Math.max(0.1, 1.0 - 0.1 * V_wind);
+        }
+
+        // Acumular pérdida térmica ponderada por irradiancia (solo cuando hay sol)
+        if (Gtot > 0) {
+          sum_thermal_loss_x_gtot += chi_per_c * Math.max(0, T_cell - 25.0) * Gtot;
+          sum_gtot_pos += Gtot;
         }
 
         // Aplicamos una sola corrección de eficiencia basada en T_cell
@@ -902,6 +914,9 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
   }
   const gtot_media_W_m2 = cnt_g_pos > 0 ? sum_g_pos / cnt_g_pos : 0;
 
+  // Pérdida térmica media anual ponderada por irradiancia [%]
+  const thermal_loss_pct = sum_gtot_pos > 0 ? (sum_thermal_loss_x_gtot / sum_gtot_pos) * 100 : 0;
+
   const stats = {
     energia_anual_kWh: energia_anual_kwh,
     energia_anual_MWh: energia_anual_kwh / 1000.0,
@@ -930,6 +945,7 @@ function runSolarEngine(lat, lon, alt, area_m2, n_panels, tilt, azimuth, p_nomin
     rain_days: rainDays,
     rain_loss: rainLossPct,
     soiling_loss: soilingLossPct,
+    thermal_loss_pct,
   };
 
   return {
@@ -964,34 +980,46 @@ window.setTambMode = function(mode) {
   }
 };
 
-// ── Cliente NASA POWER API (Temperatura ambiente típica) ──
+// ── Cliente NASA POWER API (Temperatura ambiente con perfil diurno sinusoidal) ──
 async function fetchTambienteNASA(lat, lon) {
-  const url = `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=T2M,RH2M&community=RE&longitude=${lon}&latitude=${lat}&format=JSON`;
+  const url = `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=T2M,T2M_MAX,T2M_MIN,RH2M&community=RE&longitude=${lon}&latitude=${lat}&format=JSON`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`NASA POWER HTTP ${res.status}`);
   const data = await res.json();
-  const t2m  = data.properties.parameter.T2M;
+  const t2m     = data.properties.parameter.T2M;
   if (!t2m) throw new Error('NASA POWER: T2M ausente en la respuesta');
-  const rh2m = data.properties.parameter.RH2M ?? null;
-  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-  const tamb_mensual = months.map(m => t2m[m]);
-  const rh_mensual   = rh2m ? months.map(m => rh2m[m]) : null;
+  const t2m_max = data.properties.parameter.T2M_MAX ?? null;
+  const t2m_min = data.properties.parameter.T2M_MIN ?? null;
+  const rh2m    = data.properties.parameter.RH2M    ?? null;
 
+  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
   const days_in_month = [31,28,31,30,31,30,31,31,30,31,30,31];
+
+  // Hora local del máximo térmico diario (modelo estándar ASHRAE: ~14h)
+  const H_MAX = 14.0;
+
   const tamb_arr = new Float64Array(35040);
-  const rh_arr   = rh_mensual ? new Float64Array(35040) : null;
+  const rh_arr   = rh2m ? new Float64Array(35040) : null;
   let idx = 0;
   for (let m = 0; m < 12; m++) {
-    const pts  = days_in_month[m] * 96;
-    const temp = tamb_mensual[m];
-    const rh   = rh_mensual ? rh_mensual[m] : 0;
-    for (let i = 0; i < pts; i++) {
-      tamb_arr[idx] = temp;
-      if (rh_arr) rh_arr[idx] = rh;
-      idx++;
+    const key   = months[m];
+    const tmean = t2m[key];
+    const tmax  = t2m_max ? (t2m_max[key] ?? tmean) : tmean;
+    const tmin  = t2m_min ? (t2m_min[key] ?? tmean) : tmean;
+    const amp   = (tmax - tmin) / 2.0;   // amplitud diurna
+    const rh    = rh2m ? (rh2m[key] ?? 0) : 0;
+
+    for (let d = 0; d < days_in_month[m]; d++) {
+      for (let iv = 0; iv < 96; iv++) {
+        const h = iv * 0.25; // hora local 0.0–23.75
+        // Modelo coseno simétrico: T_max en H_MAX, T_min en H_MAX±12
+        tamb_arr[idx] = tmean + amp * Math.cos(2 * Math.PI * (h - H_MAX) / 24.0);
+        if (rh_arr) rh_arr[idx] = rh;
+        idx++;
+      }
     }
   }
-  return { tamb_arr, rh_arr };
+  return { tamb_arr, rh_arr, diurnal: t2m_max !== null };
 }
 
 async function runSolar() {
@@ -1030,9 +1058,10 @@ async function runSolar() {
       if (statusEl) statusEl.innerHTML = `📡 Obteniendo perfil climatológico (T2M + RH2M) desde NASA POWER API...`;
       tamb_nasa_arr = await fetchTambienteNASA(payload.lat, payload.lon);
       const rhOk = tamb_nasa_arr.rh_arr !== null;
+      const diurnal = tamb_nasa_arr.diurnal;
       if (statusEl) statusEl.innerHTML = rhOk
-        ? `✅ Perfil T_amb + Humedad Relativa descargado de NASA POWER (resolución mensual → 15 min).`
-        : `✅ T_amb de NASA POWER · ⚠️ RH2M no disponible para estas coordenadas — usando humedad manual.`;
+        ? `✅ Perfil T_amb + RH2M de NASA POWER${diurnal ? ' · Ciclo diurno sinusoidal (T_max/T_min) → 15 min' : ' · resolución mensual → 15 min'}.`
+        : `✅ T_amb NASA POWER${diurnal ? ' · ciclo diurno' : ''} · ⚠️ RH2M no disponible — usando humedad manual.`;
     } catch (e) {
       console.error("NASA API Error:", e);
       if ($('nasa-tamb-status')) $('nasa-tamb-status').innerHTML = `⚠️ Falló conexión a NASA (${e.message}). Regresando a modo manual.`;
@@ -1221,16 +1250,20 @@ async function runSolar() {
             const dpm = [31,28,31,30,31,30,31,31,30,31,30,31];
             let sumT = 0, sumRH = 0, count = 0;
             let ix = 0;
+            // Solo promediar horas de mediodía (10:00–16:00, intervalos 40–63) en meses de verano
             for (let m = 0; m < 12; m++) {
-              const pts = dpm[m] * 96;
+              const days = dpm[m];
               if (m >= 4 && m <= 9) {
-                for (let i = 0; i < pts; i++) {
-                  sumT += nasaTamb[ix + i];
-                  if (nasaRH) sumRH += nasaRH[ix + i];
+                for (let d = 0; d < days; d++) {
+                  for (let iv = 40; iv < 64; iv++) { // 10:00–15:45
+                    const idx = ix + d * 96 + iv;
+                    sumT += nasaTamb[idx];
+                    if (nasaRH) sumRH += nasaRH[idx];
+                    count++;
+                  }
                 }
-                count += pts;
               }
-              ix += pts;
+              ix += days * 96;
             }
             tempVerano = sumT / count;
             humVerano  = nasaRH ? sumRH / count : (thermalParams?.hum_verano ?? 65);
@@ -1240,10 +1273,11 @@ async function runSolar() {
           }
 
           const T_cel = tempVerano + (noct_val - 20) * (1 - 0.003 * humVerano) * Math.max(0.1, 1 - 0.1 * viento_val);
-          const totalGen       = data.stats.energia_anual_kWh;
-          const genSinTermico  = data.stats.eta_ref * parseFloat($('input-area').value) * data.stats.horas_pico_sol_equiv * parseInt($('input-npanels').value) * (data.stats.eta_sys ?? 0.85) * (1.0 - parseFloat($('soiling-loss-pct')?.value ?? 0.05));
-          const pctThermal     = genSinTermico > 0 ? ((genSinTermico - totalGen) / genSinTermico * 100) : 0;
-          tContent.innerHTML   = `T_cel verano estimada (mediodía): <strong>${T_cel.toFixed(1)}°C</strong> &nbsp;|&nbsp; Pérdida térmica estimada: <strong style="color:#ef4444">${Math.max(0, pctThermal).toFixed(1)}%</strong>`;
+          // Pérdida térmica directa: η_T/η_ref = 1 - chi*(T_cel-25), por lo que la pérdida = chi*(T_cel-25)
+          const chi_val         = parseFloat($('chi-panel')?.value ?? 0.40); // %/°C
+          const pctThermalPico  = chi_val * Math.max(0, T_cel - 25);
+          const pctThermalAnual = data.stats?.thermal_loss_pct ?? 0;
+          tContent.innerHTML    = `T_cel est. mediodía verano: <strong>${T_cel.toFixed(1)}°C</strong> &nbsp;|&nbsp; Pérdida térmica media anual (ponderada por irradiancia): <strong style="color:#ef4444">${pctThermalAnual.toFixed(1)}%</strong> <span style="font-size:.75em;color:var(--text-muted)">(est. mediodía verano: ${pctThermalPico.toFixed(1)}%)</span>`;
           tBox.style.display = '';
         }
       }
@@ -1281,42 +1315,51 @@ async function runSolar() {
 // CALCULADORA DE SIZING DE BATERÍAS
 // ─────────────────────────────────────────────────────────────────────────────
 function renderBatterySizing(balance) {
-  const box = $('bat-sizing-box');
-  const content = $('bat-sizing-content');
-  if (!box || !content) return;
+  const box            = $('bat-sizing-box');
+  const contentApagones = $('bat-sizing-content-apagones');
+  const contentBackup   = $('bat-sizing-content-backup');
+  const backupSection   = $('bat-sizing-backup-section');
+  if (!box || !contentApagones) return;
 
-  const minKwh = balance.bat_sizing_min_kwh ?? 0;
-  const usd_mxn = parseFloat($('usd-mxn')?.value ?? 17.50);
+  const minKwh      = balance.bat_sizing_min_kwh ?? 0;
+  const usd_mxn     = parseFloat($('usd-mxn')?.value ?? 17.50);
   const cost_usd_kwh = parseFloat($('bat-costo-kwh')?.value ?? 350);
-  const dod = parseFloat($('bat-dod')?.value ?? 80) / 100;
-  // Capacidad nominal (kWh) = usable / DoD
+  const dod         = parseFloat($('bat-dod')?.value ?? 80) / 100;
   const cap_nominal = dod > 0 ? minKwh / dod : minKwh;
-  const costo_usd = cap_nominal * cost_usd_kwh;
-  const costo_mxn = costo_usd * usd_mxn;
+  const costo_usd   = cap_nominal * cost_usd_kwh;
+  const costo_mxn   = costo_usd * usd_mxn;
 
-  const useBat = $('toggle-baterias')?.checked;
+  const useBat      = $('toggle-baterias')?.checked;
   const ens_residual = balance.bat_ens_residual_kwh;
-  const bat_provided  = balance.bat_energy_kwh;
+  const bat_provided = balance.bat_energy_kwh;
 
   const fmt = (n, d=0) => n == null ? '—' : Number(n).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-  const cards = [
-    { label: 'Capacidad Útil Mínima', val: `${fmt(minKwh, 1)} kWh`, color: '#10b981', desc: 'Para mitigar el peor apagón simulado' },
-    { label: 'Capacidad Nominal Recomendada', val: `${fmt(cap_nominal, 0)} kWh`, color: '#10b981', desc: `Considerando DoD = ${(dod*100).toFixed(0)}%` },
-    { label: 'Costo Estimado del Banco', val: `$${fmt(costo_mxn, 0)} MXN`, color: '#fbbf24', desc: `≈ $${fmt(costo_usd, 0)} USD` },
-  ];
-
-  if (useBat && bat_provided != null) {
-    cards.push({ label: 'Energía Provista por Batería', val: `${fmt(bat_provided, 1)} kWh/año`, color: '#3b82f6', desc: 'Durante apagones' });
-    cards.push({ label: 'ENS Residual (con Batería)', val: `${fmt(ens_residual, 1)} kWh/año`, color: ens_residual > 0 ? '#ef4444' : '#10b981', desc: ens_residual > 0 ? 'Batería insuficiente' : '✅ Sin déficit' });
-  }
-
-  content.innerHTML = cards.map(c => `
+  const card = (label, val, color, desc) => `
     <div style="background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.15);border-radius:10px;padding:1rem;text-align:center;">
-      <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem;">${c.label}</div>
-      <div style="font-size:1.05rem;font-weight:700;color:${c.color};margin-bottom:.3rem;">${c.val}</div>
-      <div style="font-size:0.72rem;color:var(--text-muted);">${c.desc}</div>
-    </div>`).join('');
+      <div style="font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.4rem;">${label}</div>
+      <div style="font-size:1.05rem;font-weight:700;color:${color};margin-bottom:.3rem;">${val}</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);">${desc}</div>
+    </div>`;
+
+  // Grupo 1: dimensionamiento según apagones
+  contentApagones.innerHTML = [
+    card('Capacidad Útil Mínima',         `${fmt(minKwh, 1)} kWh`,     '#10b981', 'Para mitigar el peor apagón simulado'),
+    card('Capacidad Nominal Recomendada', `${fmt(cap_nominal, 0)} kWh`, '#10b981', `Considerando DoD = ${(dod*100).toFixed(0)}%`),
+    card('Costo Estimado del Banco',      `$${fmt(costo_mxn, 0)} MXN`,  '#fbbf24', `≈ $${fmt(costo_usd, 0)} USD`),
+  ].join('');
+
+  // Grupo 2: desempeño del banco configurado (solo si baterías activas)
+  if (backupSection && contentBackup) {
+    if (useBat && bat_provided != null) {
+      contentBackup.innerHTML = [
+        card('Energía Provista por Batería', `${fmt(bat_provided, 1)} kWh/año`, '#3b82f6', 'Durante apagones cubiertos por el banco'),
+        card('ENS Residual (con Batería)',   `${fmt(ens_residual, 1)} kWh/año`, ens_residual > 0 ? '#ef4444' : '#10b981', ens_residual > 0 ? 'Banco insuficiente para todo el déficit' : '✅ Sin déficit residual'),
+      ].join('');
+      backupSection.style.display = '';
+    } else {
+      backupSection.style.display = 'none';
+    }
+  }
 
   box.style.display = '';
 }

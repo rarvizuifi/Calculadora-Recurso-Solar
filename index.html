@@ -957,6 +957,25 @@
           <input type="number" class="form-input" id="input-alt"
                  step="1" value="538" placeholder="Ej: 538" />
         </div>
+        <div class="form-group">
+          <label class="form-label" for="input-utc-offset">
+            Zona Horaria <span class="label-unit">[UTC offset]</span>
+          </label>
+          <input type="number" class="form-input" id="input-utc-offset"
+                 step="0.5" value="-6" min="-12" max="14" placeholder="Ej: -6" />
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">
+            México: CST = −6 · MST (Sonora) = −7 · PST (Baja Cal) = −8
+          </div>
+        </div>
+      </div>
+
+      <!-- Nota: ubicación sincronizada desde CFE (visible solo cuando toggle-use-cfe-location=ON) -->
+      <div id="cfe-location-note" style="display:none;font-size:.75rem;color:var(--text-muted);
+           margin-top:-.75rem;margin-bottom:1.5rem;padding:.45rem .75rem;
+           border-left:2px solid rgba(249,115,22,0.4);line-height:1.6">
+        📍 Latitud, longitud y altitud obtenidas de la ubicación ingresada en
+        <strong style="color:var(--accent-orange)">Tarifas CFE GDMTO</strong>.
+        Desactiva el toggle para ingresar una ubicación independiente.
       </div>
 
       <!-- ── PANEL DE ÁNGULOS ÓPTIMOS ──────────────────────────────────────── -->
@@ -1178,11 +1197,6 @@
         </div>
       </div>
 
-      <div id="solar-alert"></div>
-
-      <button class="btn btn-primary btn-full" id="btn-solar" style="margin-top:1rem">
-        <span>☀️</span> Ejecutar Motor de Jensen — Calcular Sistema FV
-      </button>
     </div>
 
   </div>
@@ -1484,16 +1498,43 @@
 
     <!-- Calculadora de baterías necesarias -->
     <div class="card card-lg fade-in" id="bat-sizing-box" style="display:none;">
-      <div style="font-size:0.8rem;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem;">🧮 Calculadora de Reserva Mínima</div>
-      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem;">
-        Basado en los apagones simulados, el sistema estima la capacidad de batería mínima para lograr <strong style="color:#10b981">0 kWh de ENS</strong>.
-      </p>
-      <div id="bat-sizing-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;"></div>
+      <div style="font-size:0.8rem;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:.05em;margin-bottom:1.25rem;">🧮 Calculadora de Reserva Mínima</div>
+
+      <!-- Grupo 1: Dimensionamiento según apagones -->
+      <div style="margin-bottom:1.5rem;">
+        <div style="font-size:0.71rem;color:var(--accent-orange);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:.4rem;">
+          📊 Dimensionamiento del banco — según los apagones simulados
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:.85rem;line-height:1.55;">
+          Capacidad mínima necesaria para lograr <strong style="color:#10b981">0 kWh de ENS</strong> ante los apagones configurados.
+        </p>
+        <div id="bat-sizing-content-apagones" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;"></div>
+      </div>
+
+      <!-- Grupo 2: Desempeño del banco configurado -->
+      <div id="bat-sizing-backup-section" style="display:none;">
+        <div style="height:1px;background:rgba(255,255,255,0.07);margin-bottom:1.25rem;"></div>
+        <div style="font-size:0.71rem;color:#3b82f6;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:.4rem;">
+          🔋 Desempeño del banco configurado — según respaldo de baterías
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:.85rem;line-height:1.55;">
+          Energía efectivamente cubierta y déficit residual al operar el banco con la capacidad y DoD configurados.
+        </p>
+        <div id="bat-sizing-content-backup" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;"></div>
+      </div>
     </div>
   </div>
 </section>
 
 <div class="section-divider-line"></div>
+
+<!-- Botón de ejecución — después de toda la configuración, justo antes de resultados -->
+<div style="max-width:var(--section-max-width,900px);margin:0 auto;padding:1.5rem var(--section-pad,1.5rem);">
+  <div id="solar-alert"></div>
+  <button class="btn btn-primary btn-full" id="btn-solar">
+    <span>☀️</span> Ejecutar Motor de Jensen — Calcular Sistema FV
+  </button>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      SECCIÓN 3: RESULTADOS
@@ -2040,6 +2081,8 @@
       const applyToggle = () => {
         const isOn = toggleCFE.checked;
         if (solPicker) solPicker.style.display = isOn ? 'none' : '';
+        const note = document.getElementById('cfe-location-note');
+        if (note) note.style.display = isOn ? '' : 'none';
         ['input-lat', 'input-lon', 'input-alt'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.readOnly = isOn;

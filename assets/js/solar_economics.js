@@ -195,8 +195,12 @@ function renderEconomicResults(factura, roi, params) {
   
   if (eKPIs) {
     const batKpis = [];
+    const outagesEnabled = document.getElementById('toggle-outages')?.checked;
     if (roi.bat_capex_mxn > 0) {
       batKpis.push({ val: fmDual(roi.bat_capex_mxn, 0), unit: '', label: 'CAPEX Baterías (BESS)', color: '#10b981' });
+      if (!outagesEnabled) {
+        batKpis.push({ val: '⚠️ Sin valor económico', unit: '', label: 'Baterías activas pero Apagones desactivado — el ahorro de BESS no se contabiliza en este modelo', color: '#f59e0b' });
+      }
     }
     eKPIs.innerHTML = [
       { val: fmDual(ahorro_real, 0),            unit: '/año',   label: 'Ahorro real anual estimado', color: '#10b981' },
@@ -257,7 +261,8 @@ function renderEconomicResults(factura, roi, params) {
           <tfoot>
             <tr style="background:rgba(249,115,22,0.08);color:#f97316;font-weight:700">
               <td style="padding:.6rem .9rem;border-top:1px solid rgba(249,115,22,0.3)">TOTAL ANUAL</td>
-              <td colspan="2" style="padding:.6rem .9rem;border-top:1px solid rgba(249,115,22,0.3)"></td>
+              <td style="padding:.6rem .9rem;border-top:1px solid rgba(249,115,22,0.3);font-weight:400;color:#94a3b8">${fm(factura.total_e_sin,0)} kWh</td>
+              <td style="padding:.6rem .9rem;border-top:1px solid rgba(249,115,22,0.3);font-weight:400;color:#94a3b8">${fm(factura.total_e_con,0)} kWh</td>
               <td style="padding:.6rem .9rem;border-top:1px solid rgba(249,115,22,0.3)">${fmMXN(factura.factura_sin,0)}</td>
               <td style="padding:.6rem .9rem;border-top:1px solid rgba(249,115,22,0.3)">${fmMXN(factura.factura_con,0)}</td>
               <td style="padding:.6rem .9rem;border-top:1px solid rgba(249,115,22,0.3);color:#10b981">
